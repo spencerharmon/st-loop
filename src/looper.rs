@@ -6,25 +6,30 @@ use crate::sequence::*;
 use st_lib::owned_midi::*;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::cell::RefMut;
+use jack::jack_sys as j;
+use std::mem::MaybeUninit;
 
 pub struct Looper {
     command_rx: Receiver<OwnedMidi>,
-    audio_in_vec: Vec<Receiver<(f32, f32)>>,
+    audio_in_vec: Rc<RefCell<Vec<Receiver<(f32, f32)>>>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
-    audio_out_vec: Vec<Sender<(f32, f32)>>,
+    audio_out_vec: Rc<RefCell<Vec<Sender<(f32, f32)>>>>,
     midi_out_vec: Vec<OwnedMidi>,
+    jack_client_addr: usize,
     command_manager: CommandManager,
     scenes: Rc<RefCell<Vec<Scene>>>,
     audio_sequences: Rc<RefCell<Vec<RefCell<AudioSequence>>>>,
 }
 
 impl Looper {
-    pub fn new(
+    pub fn new (
         command_rx: Receiver<OwnedMidi>,
-        audio_in_vec: Vec<Receiver<(f32, f32)>>,
+        audio_in_vec: Rc<RefCell<Vec<Receiver<(f32, f32)>>>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
-        audio_out_vec: Vec<Sender<(f32, f32)>>,
+        audio_out_vec: Rc<RefCell<Vec<Sender<(f32, f32)>>>>,
         midi_out_vec: Vec<OwnedMidi>,
+	jack_client_addr: usize
     ) -> Looper {
 	let command_manager = CommandManager::new();
 
@@ -45,6 +50,7 @@ impl Looper {
             midi_in_vec, 
             audio_out_vec, 
             midi_out_vec,
+	    jack_client_addr,
 	    command_manager,
 	    scenes,
 	    audio_sequences
@@ -53,8 +59,18 @@ impl Looper {
     }
     pub async fn start(mut self) {
 	let recording_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
+	let playing_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
 
+	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(self.jack_client_addr);
+	
 	loop {
+	    let mut b_rec_seq = recording_sequences.borrow_mut();
+	    let mut b_play_seq = playing_sequences.borrow_mut();
+	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
+	    let mut b_scenes = self.scenes.borrow_mut();
+	    let mut b_input = self.audio_in_vec.borrow_mut();
+	    let mut b_output = self.audio_out_vec.borrow_mut();
+
 	    match self.command_rx.try_recv() {
 		Ok(rm) => self.command_manager.process_midi(rm),
 		Err(_) => ()
@@ -62,14 +78,16 @@ impl Looper {
 
 	    //go command
             if self.command_manager.go {
-		let mut b_rec_seq = recording_sequences.borrow_mut();
 
-		let mut b_aud_seq = self.audio_sequences.borrow_mut();
-		let mut b_scenes = self.scenes.borrow_mut();
 
 		//first stop anything currently recording.
-                for s in b_rec_seq.iter() {
-		    b_aud_seq.get(*s).unwrap().borrow_mut().stop_recording();
+                for i in 0..b_rec_seq.len() {
+		    let s = b_rec_seq.get(i).unwrap();
+		    let seq = b_aud_seq.get(*s).unwrap().borrow_mut();
+		    seq.stop_recording();
+		    
+		    // always autoplay new sequences
+		    b_play_seq.push(*s);
 		}
 		for _ in 0..b_rec_seq.len() {
 		    b_rec_seq.pop();
@@ -87,23 +105,39 @@ impl Looper {
                     }
 		}
 
-		//recording sequences procedure
-		for s in b_rec_seq.iter() {
-		    let bseqvec =self.audio_sequences.borrow_mut(); 
-		    let seq = bseqvec.get(*s).unwrap();
-
-		    let mut bseq = seq.borrow_mut();
-		    let t = bseq.track;
-		    bseq.process_record(
-			self.audio_in_vec
-			    .get(t)
-			    .unwrap()
-			    .recv()
-			    .unwrap()
-		    );
-		}
                 self.command_manager.clear();
             }
+	    
+	    //recording sequences procedure
+	    for s in b_rec_seq.iter() {
+	        let seq = b_aud_seq.get(*s).unwrap();
+
+	        let mut bseq = seq.borrow_mut();
+	        let t = bseq.track;
+	        bseq.process_record(
+	    	    b_input.get(t)
+	    		.unwrap()
+	    		.recv()
+	    		.unwrap()
+	        );
+	    }
+	    //playing sequences procedure
+	    for s in b_play_seq.iter() {
+
+		let seq = b_aud_seq.get(*s).unwrap();
+
+		let mut bseq = seq.borrow_mut();
+
+		let t = bseq.track;
+
+		let mut pos = MaybeUninit::uninit().as_mut_ptr();
+		unsafe {
+		    j::jack_transport_query(client_pointer, pos);
+
+		    bseq.process_position((*pos).frame as usize);
+		}
+
+	    }
 	}	    
     }
 }

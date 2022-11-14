@@ -27,11 +27,16 @@ impl JackIO {
 	//dummy vec of midi receivers
 	let midi_rx_channels = Vec::new();
 	
-	//dummy vec of audio senders
-	let audio_tx_channels = Vec::new();
-	//dummy vec of audio receivers
-	let audio_rx_channels = Vec::new();
-	
+	//audio channels
+	let audio_channel_count = 8;
+	let audio_tx_channels = Rc::new(RefCell::new(Vec::new()));
+	let audio_rx_channels = Rc::new(RefCell::new(Vec::new()));
+	for i in 0..audio_channel_count {
+	    let (tx, rx) = unbounded();
+	    
+	    audio_rx_channels.borrow_mut().push(rx);
+	    audio_tx_channels.borrow_mut().push(tx);
+	}
         let (client, _status) =
             jack::Client::new("st-loop", jack::ClientOptions::NO_START_SERVER).unwrap();
         let mut command_midi_port = client
@@ -60,25 +65,13 @@ impl JackIO {
         );
         let active_client = client.activate_async((), process).unwrap();
 
-
-//	let mut scenes = Vec::new();
-//
-//	let s0 = Scene::new();
-//	scenes.push(&s0);
-//	let s1 = Scene::new();
-//	scenes.push(&s1);
-//	let s2 = Scene::new();
-//	scenes.push(&s2);
-//	let s3 = Scene::new();
-//	scenes.push(&s3);
-//	
-
 	let mut looper = Looper::new(
 	    command_midi_rx,
 	    audio_rx_channels,
 	    midi_rx_channels,
 	    audio_tx_channels,
 	    midi_tx_channels,
+	    client_pointer.expose_addr()
 	);
 	looper.start().await;
     }

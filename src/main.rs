@@ -1,3 +1,5 @@
+#![feature(strict_provenance)]
+
 mod jackio;
 mod looper;
 mod command_manager;

@@ -2,17 +2,14 @@ pub enum Sequence {
     AudioSequence,
 }
 
-pub trait TSequence <T> {
-    fn record(&self);
-    fn stop_recording (&self);
-    fn process_position (&mut self) -> T; 
-}
 pub struct AudioSequence {
     pub track: usize,
     left: Vec<f32>,
     right: Vec<f32>,
     playhead: usize,
-    length: usize
+    length: usize,
+    last_frame: usize
+
 }
 
 impl AudioSequence {
@@ -21,8 +18,9 @@ impl AudioSequence {
 	let left = Vec::new();
 	let right = Vec::new();
 	let playhead = 0;
+	let last_frame = 0;
 	
-	AudioSequence { track, left, right, playhead, length }
+	AudioSequence { track, left, right, playhead, length, last_frame }
     }
     
     fn increment_playhead(&mut self) {
@@ -36,25 +34,22 @@ impl AudioSequence {
 	self.left.push(tup.0);
 	self.right.push(tup.1);
     }
-}
 
-impl TSequence<(Vec<f32>, Vec<f32>)> for AudioSequence {
-    fn record(&self) {
+    pub fn stop_recording(&self) {
 	();
     }
-    fn stop_recording(&self) {
-	();
-    }
-    fn process_position(&mut self) -> (Vec<f32>, Vec<f32>) {
-	let mut ret_l = Vec::new();
-	let mut ret_r = Vec::new();
+    pub fn process_position(&mut self,
+			    pos_frame: usize,
+    ) -> Vec<(f32, f32)> {
+	let mut ret = Vec::new();
+	
+	let nframes = pos_frame - self.last_frame;
 
-	let last_frame = self.playhead + 128;
-	for i in self.playhead..last_frame {
-	    ret_l.push(*self.left.get(i).unwrap());
-	    ret_r.push(*self.left.get(i).unwrap());
+	for i in self.playhead..(self.playhead + nframes + 1) {
+	    ret.push((*self.left.get(i).unwrap(), *self.left.get(i).unwrap()));
 	    self.increment_playhead();
 	}
-	(ret_l, ret_r)
+	self.last_frame = pos_frame;
+	ret
     }
 }
