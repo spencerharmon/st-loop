@@ -8,7 +8,7 @@ pub trait TSequence <T> {
     fn process_position (&mut self) -> T; 
 }
 pub struct AudioSequence {
-    track: usize,
+    pub track: usize,
     left: Vec<f32>,
     right: Vec<f32>,
     playhead: usize,
@@ -32,7 +32,12 @@ impl AudioSequence {
 	    self.playhead = self.playhead + 1;
 	}
     }
+    pub fn process_record(&mut self, tup: (f32, f32)) {
+	self.left.push(tup.0);
+	self.right.push(tup.1);
+    }
 }
+
 impl TSequence<(Vec<f32>, Vec<f32>)> for AudioSequence {
     fn record(&self) {
 	();
