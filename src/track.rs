@@ -1,11 +1,13 @@
 use crossbeam_channel::*;
 use crate::sequence::*;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 
 
-pub struct AudioTrack {
-//    inputs: Receiver<(f32, f32)>,
-//    outputs: Sender<(f32, f32)>
+pub struct AudioTrack{
+    pub input_idx: usize,
+    pub output_idx: usize
 }
 
 

@@ -34,10 +34,10 @@ impl Looper {
 	let audio_tracks = Rc::new(RefCell::new(Vec::new()));
 	for i in 0..audio_track_count {
 	    audio_tracks.borrow_mut().push(
-		AudioTrack { }
-//		    inputs: *audio_in_vec.get(i).unwrap(),
-//		    outputs: *audio_out_vec.get(i).unwrap()
-//		}
+		AudioTrack { 
+		    input_idx: i,
+		    output_idx: i
+		}
 	    );
 	}
 

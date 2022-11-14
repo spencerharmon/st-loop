@@ -6,6 +6,8 @@ use std::{thread, time};
 use crate::looper::Looper;
 use st_lib::owned_midi::*;
 use crate::scene::Scene;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 pub struct JackIO;
 
@@ -25,9 +27,9 @@ impl JackIO {
 	//dummy vec of midi receivers
 	let midi_rx_channels = Vec::new();
 	
-	//dummy vec of stereo senders
+	//dummy vec of audio senders
 	let audio_tx_channels = Vec::new();
-	//dummy vec of stereo receivers
+	//dummy vec of audio receivers
 	let audio_rx_channels = Vec::new();
 	
         let (client, _status) =
