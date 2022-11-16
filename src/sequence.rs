@@ -24,7 +24,7 @@ impl AudioSequence {
     }
     
     fn increment_playhead(&mut self) {
-	if self.playhead == self.length {
+	if self.playhead >= self.length {
 	    self.playhead = 0;
 	} else {
 	    self.playhead = self.playhead + 1;
@@ -61,10 +61,10 @@ impl AudioSequence {
 //			    println!("data {:?}", (*l, *r));
 			    ret.push((*l, *r));
 			},
-			_ => continue
+			_ => ()
 		    }
 		},
-		_ => continue
+		_ => ()
 	    }
 	    // ret.push(
 	    // 	(
