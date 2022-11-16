@@ -10,6 +10,7 @@ use jack::jack_sys as j;
 use std::mem::MaybeUninit;
 
 pub struct Looper {
+    ps_rx: Receiver<()>,
     command_rx: Receiver<OwnedMidi>,
     audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
@@ -23,6 +24,7 @@ pub struct Looper {
 
 impl Looper {
     pub fn new (
+	ps_rx: Receiver<()>,
         command_rx: Receiver<OwnedMidi>,
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
@@ -44,6 +46,7 @@ impl Looper {
 	//make sequences
 	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
 	Looper {
+	    ps_rx,
 	    command_rx, 
             audio_in_vec,
             midi_in_vec, 
@@ -63,6 +66,10 @@ impl Looper {
 	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(self.jack_client_addr);
 	
 	loop {
+	    match self.ps_rx.try_recv(){
+		Ok(()) => (),
+		Err(_) => continue
+	    }	    
 	    let mut b_rec_seq = recording_sequences.borrow_mut();
 	    let mut b_play_seq = playing_sequences.borrow_mut();
 	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
@@ -112,7 +119,10 @@ impl Looper {
 
 	        let mut bseq = seq.borrow_mut();
 	        let t = bseq.track;
-		match self.audio_in_vec.get(t).unwrap().try_recv() {
+		let in_stereo_tup_chan = self.audio_in_vec.get(t).unwrap();
+		//		println!("try process record");
+		//probably use unwrap and allow this to panic.
+		match in_stereo_tup_chan.try_recv() {
 		    Ok(data) => bseq.process_record(data),
 		    Err(_) => ()
 		}
@@ -131,9 +141,12 @@ impl Looper {
 		unsafe {
 		    j::jack_transport_query(client_pointer, pos);
 
-		    bseq.process_position((*pos).frame as usize);
+		    let (chan_l, chan_r) = self.audio_out_vec.get(t).unwrap();
+		    for (l_bytes, r_bytes) in bseq.process_position((*pos).frame as usize){
+			chan_l.try_send(l_bytes);
+			chan_r.try_send(r_bytes);
+		    }
 		}
-
 	    }
 	}	    
     }

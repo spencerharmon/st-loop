@@ -49,6 +49,8 @@ impl CommandManager {
 		self.scene(7);
 	    } else if m == midi_control::scene8() {
 		self.scene(8);
+	    } else if m == midi_control::track0() {
+		self.track(0);
 	    } else if m == midi_control::track1() {
 		self.track(1);
 	    } else if m == midi_control::track2() {
@@ -79,9 +81,7 @@ impl CommandManager {
 		self.track(14);
 	    } else if m == midi_control::track15() {
 		self.track(15);
-	    } else if m == midi_control::track16() {
-		self.track(16);
-	    }
+	    } 
 	    println!("{:?}", self);
 	}
     }

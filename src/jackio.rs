@@ -74,9 +74,9 @@ impl JackIO {
 //	audio_out_jack_ports.push((out_1_l, out_1_r));
 
 	//channel 0
-	let (out_l_tx_0, out_l_rx_0) = unbounded();
-	let (out_r_tx_0, out_r_rx_0) = unbounded();
-	let (in_tx_0, in_rx_0) = unbounded();
+	let (out_l_tx_0, out_l_rx_0) = bounded(1000);
+	let (out_r_tx_0, out_r_rx_0) = bounded(1000);
+	let (in_tx_0, in_rx_0) = bounded(1000);
 	
 	audio_out_rx_channels.push((out_l_rx_0, out_r_rx_0));
 	audio_out_tx_channels.push((out_l_tx_0, out_r_tx_0));
@@ -84,9 +84,9 @@ impl JackIO {
 	audio_in_tx_channels.push(in_tx_0);
 	
 	//channel 1
-	let (out_l_tx_1, out_l_rx_1) = unbounded();
-	let (out_r_tx_1, out_r_rx_1) = unbounded();
-	let (in_tx_1, in_rx_1) = unbounded();
+	let (out_l_tx_1, out_l_rx_1) = bounded(1000);
+	let (out_r_tx_1, out_r_rx_1) = bounded(1000);
+	let (in_tx_1, in_rx_1) = bounded(1000);
 	
 	audio_out_rx_channels.push((out_l_rx_1, out_r_rx_1));
 	audio_out_tx_channels.push((out_l_tx_1, out_r_tx_1));
@@ -151,22 +151,21 @@ impl JackIO {
 
 		let (l_out_chan0, r_out_chan0) = audio_out_rx_channels.get(0).unwrap();
 
-                let mut jack_out_l = out_0_l.as_mut_slice(ps);
-                let mut jack_out_r = out_0_r.as_mut_slice(ps);
-		    // write left output
-		    for v in jack_out_l.iter_mut(){
-			*v = 0.0;
-			if let Ok(float) = l_out_chan0.try_recv() {
-                            *v = float;
-			}
+		// write left output
+		for v in out_0_l.as_mut_slice(ps).iter_mut(){
+		    *v = 0.0;
+		    if let Ok(float) = l_out_chan0.try_recv() {
+			println!("{}", float);
+                        *v = float;
 		    }
-		    // write right output
-		    for v in jack_out_r.iter_mut(){
-			*v = 0.0;
-			if let Ok(float) = r_out_chan0.try_recv() {
-                            *v = float;
-			}
+		}
+		// write right output
+		for v in out_0_r.as_mut_slice(ps).iter_mut(){
+		    *v = 0.0;
+		    if let Ok(float) = r_out_chan0.try_recv() {
+                        *v = float;
 		    }
+		}
 
                 let mut jack_out_l = out_1_l.as_mut_slice(ps);
                 let mut jack_out_r = out_1_r.as_mut_slice(ps);
@@ -178,6 +177,7 @@ impl JackIO {
         let active_client = client.activate_async((), process).unwrap();
 
 	let mut looper = Looper::new(
+	    ps_rx,
 	    command_midi_rx,
 	    audio_in_rx_channels,
 	    midi_rx_channels,

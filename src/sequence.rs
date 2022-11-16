@@ -34,7 +34,6 @@ impl AudioSequence {
 	self.left.push(tup.0);
 	self.right.push(tup.1);
 	self.length = self.length + 1;
-	println!("{}", self.length);
     }
 
     pub fn stop_recording(&self) {
@@ -47,20 +46,33 @@ impl AudioSequence {
 	
 	let nframes = pos_frame - self.last_frame;
 
-	if self.playhead + nframes > self.length {
-	    for i in self.playhead..self.length {
-		ret.push((*self.left.get(i).unwrap(), *self.left.get(i).unwrap()));
-		self.increment_playhead();
+	if nframes == 0 {
+	    //transport paused
+	    return ret
+	}
+	for i in 0..nframes {
+	    //	    println!("{}", self.playhead);
+	    //blech
+	    match self.left.get(self.playhead) {
+		Some(l) => {
+		    match self.right.get(self.playhead) {
+
+			Some(r) => {
+//			    println!("data {:?}", (*l, *r));
+			    ret.push((*l, *r));
+			},
+			_ => continue
+		    }
+		},
+		_ => continue
 	    }
-	    for i in 0..((self.playhead+nframes) - self.length) {
-		ret.push((*self.left.get(i).unwrap(), *self.left.get(i).unwrap()));
-		self.increment_playhead();
-	    }
-	} else {
-	    for i in self.playhead..(self.playhead + nframes + 1) {
-		ret.push((*self.left.get(i).unwrap(), *self.left.get(i).unwrap()));
-		self.increment_playhead();
-	    }
+	    // ret.push(
+	    // 	(
+	    // 	    *self.left.get(self.playhead).unwrap(),
+	    // 	    *self.right.get(self.playhead).unwrap()
+	    // 	)
+	    // );
+	    self.increment_playhead();
 	}
 	self.last_frame = pos_frame;
 	ret

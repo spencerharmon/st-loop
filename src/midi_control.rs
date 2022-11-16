@@ -80,7 +80,7 @@ pub fn scene8() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track1() -> wmidi::MidiMessage<'static> {
+pub fn track0() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::Ab5,
@@ -88,7 +88,7 @@ pub fn track1() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track2() -> wmidi::MidiMessage<'static> {
+pub fn track1() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::A5,
@@ -96,7 +96,7 @@ pub fn track2() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track3() -> wmidi::MidiMessage<'static> {
+pub fn track2() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::Bb5,
@@ -104,7 +104,7 @@ pub fn track3() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track4() -> wmidi::MidiMessage<'static> {
+pub fn track3() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::B5,
@@ -112,7 +112,7 @@ pub fn track4() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track5() -> wmidi::MidiMessage<'static> {
+pub fn track4() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::E5,
@@ -120,7 +120,7 @@ pub fn track5() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track6() -> wmidi::MidiMessage<'static> {
+pub fn track5() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::F5,
@@ -128,7 +128,7 @@ pub fn track6() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track7() -> wmidi::MidiMessage<'static> {
+pub fn track6() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::Gb5,
@@ -136,7 +136,7 @@ pub fn track7() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track8() -> wmidi::MidiMessage<'static> {
+pub fn track7() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::G5,
@@ -145,7 +145,7 @@ pub fn track8() -> wmidi::MidiMessage<'static> {
 }
 
 
-pub fn track9() -> wmidi::MidiMessage<'static> {
+pub fn track8() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::C5,
@@ -153,7 +153,7 @@ pub fn track9() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track10() -> wmidi::MidiMessage<'static> {
+pub fn track9() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::Db5,
@@ -161,7 +161,7 @@ pub fn track10() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track11() -> wmidi::MidiMessage<'static> {
+pub fn track10() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::D5,
@@ -169,7 +169,7 @@ pub fn track11() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track12() -> wmidi::MidiMessage<'static> {
+pub fn track11() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::Eb5,
@@ -177,7 +177,7 @@ pub fn track12() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track13() -> wmidi::MidiMessage<'static> {
+pub fn track12() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::Ab4,
@@ -185,7 +185,7 @@ pub fn track13() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track14() -> wmidi::MidiMessage<'static> {
+pub fn track13() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::A4,
@@ -193,7 +193,7 @@ pub fn track14() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track15() -> wmidi::MidiMessage<'static> {
+pub fn track14() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::Bb4,
@@ -201,7 +201,7 @@ pub fn track15() -> wmidi::MidiMessage<'static> {
     )
 }
 
-pub fn track16() -> wmidi::MidiMessage<'static> {
+pub fn track15() -> wmidi::MidiMessage<'static> {
     wmidi::MidiMessage::NoteOff(
 	wmidi::Channel::Ch10,
 	wmidi::Note::B4,
