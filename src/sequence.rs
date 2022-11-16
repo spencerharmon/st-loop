@@ -14,7 +14,7 @@ pub struct AudioSequence {
 
 impl AudioSequence {
     pub fn new(track: usize) -> AudioSequence {
-	let length = 10000;
+	let length = 0;
 	let left = Vec::new();
 	let right = Vec::new();
 	let playhead = 0;
@@ -33,6 +33,8 @@ impl AudioSequence {
     pub fn process_record(&mut self, tup: (f32, f32)) {
 	self.left.push(tup.0);
 	self.right.push(tup.1);
+	self.length = self.length + 1;
+	println!("{}", self.length);
     }
 
     pub fn stop_recording(&self) {
@@ -45,9 +47,20 @@ impl AudioSequence {
 	
 	let nframes = pos_frame - self.last_frame;
 
-	for i in self.playhead..(self.playhead + nframes + 1) {
-	    ret.push((*self.left.get(i).unwrap(), *self.left.get(i).unwrap()));
-	    self.increment_playhead();
+	if self.playhead + nframes > self.length {
+	    for i in self.playhead..self.length {
+		ret.push((*self.left.get(i).unwrap(), *self.left.get(i).unwrap()));
+		self.increment_playhead();
+	    }
+	    for i in 0..((self.playhead+nframes) - self.length) {
+		ret.push((*self.left.get(i).unwrap(), *self.left.get(i).unwrap()));
+		self.increment_playhead();
+	    }
+	} else {
+	    for i in self.playhead..(self.playhead + nframes + 1) {
+		ret.push((*self.left.get(i).unwrap(), *self.left.get(i).unwrap()));
+		self.increment_playhead();
+	    }
 	}
 	self.last_frame = pos_frame;
 	ret

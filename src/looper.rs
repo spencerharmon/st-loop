@@ -6,15 +6,14 @@ use crate::sequence::*;
 use st_lib::owned_midi::*;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::cell::RefMut;
 use jack::jack_sys as j;
 use std::mem::MaybeUninit;
 
 pub struct Looper {
     command_rx: Receiver<OwnedMidi>,
-    audio_in_vec: Rc<RefCell<Vec<Receiver<(f32, f32)>>>>,
+    audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
-    audio_out_vec: Rc<RefCell<Vec<Sender<(f32, f32)>>>>,
+    audio_out_vec: Vec<(Sender<f32>, Sender<f32>)>,
     midi_out_vec: Vec<OwnedMidi>,
     jack_client_addr: usize,
     command_manager: CommandManager,
@@ -25,9 +24,9 @@ pub struct Looper {
 impl Looper {
     pub fn new (
         command_rx: Receiver<OwnedMidi>,
-        audio_in_vec: Rc<RefCell<Vec<Receiver<(f32, f32)>>>>,
+        audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
-        audio_out_vec: Rc<RefCell<Vec<Sender<(f32, f32)>>>>,
+        audio_out_vec: Vec<(Sender<f32>, Sender<f32>)>,
         midi_out_vec: Vec<OwnedMidi>,
 	jack_client_addr: usize
     ) -> Looper {
@@ -68,8 +67,6 @@ impl Looper {
 	    let mut b_play_seq = playing_sequences.borrow_mut();
 	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
 	    let mut b_scenes = self.scenes.borrow_mut();
-	    let mut b_input = self.audio_in_vec.borrow_mut();
-	    let mut b_output = self.audio_out_vec.borrow_mut();
 
 	    match self.command_rx.try_recv() {
 		Ok(rm) => self.command_manager.process_midi(rm),
@@ -88,6 +85,7 @@ impl Looper {
 		    
 		    // always autoplay new sequences
 		    b_play_seq.push(*s);
+		    println!("{:?}", b_play_seq);
 		}
 		for _ in 0..b_rec_seq.len() {
 		    b_rec_seq.pop();
@@ -114,12 +112,11 @@ impl Looper {
 
 	        let mut bseq = seq.borrow_mut();
 	        let t = bseq.track;
-	        bseq.process_record(
-	    	    b_input.get(t)
-	    		.unwrap()
-	    		.recv()
-	    		.unwrap()
-	        );
+		match self.audio_in_vec.get(t).unwrap().try_recv() {
+		    Ok(data) => bseq.process_record(data),
+		    Err(_) => ()
+		}
+
 	    }
 	    //playing sequences procedure
 	    for s in b_play_seq.iter() {
