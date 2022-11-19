@@ -78,7 +78,7 @@ impl JackIO {
 	let (out_r_tx_0, out_r_rx_0) = bounded(1000);
 	let (in_tx_0, in_rx_0) = bounded(1000);
 	
-	audio_out_rx_channels.push((out_l_rx_0, out_r_rx_0));
+//	audio_out_rx_channels.push((out_l_rx_0, out_r_rx_0));
 	audio_out_tx_channels.push((out_l_tx_0, out_r_tx_0));
 	audio_in_rx_channels.push(in_rx_0);
 	audio_in_tx_channels.push(in_tx_0);
@@ -149,20 +149,21 @@ impl JackIO {
 
 		// loop output; split tuple
 
-		let (l_out_chan0, r_out_chan0) = audio_out_rx_channels.get(0).unwrap();
+//		let (l_out_chan0, r_out_chan0) = audio_out_rx_channels.get(0).unwrap();
 
 		// write left output
 		for v in out_0_l.as_mut_slice(ps).iter_mut(){
 		    *v = 0.0;
-		    if let Ok(float) = l_out_chan0.try_recv() {
-			println!("{}", float);
+		    if let Ok(float) = out_l_rx_0.try_recv() {
+//			println!("{}", float);
                         *v = float;
 		    }
 		}
 		// write right output
 		for v in out_0_r.as_mut_slice(ps).iter_mut(){
 		    *v = 0.0;
-		    if let Ok(float) = r_out_chan0.try_recv() {
+		    if let Ok(float) = out_r_rx_0.try_recv() {
+//			println!("{}", float);
                         *v = float;
 		    }
 		}

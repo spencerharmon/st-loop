@@ -4,11 +4,11 @@ pub enum Sequence {
 
 pub struct AudioSequence {
     pub track: usize,
-    left: Vec<f32>,
-    right: Vec<f32>,
-    playhead: usize,
-    length: usize,
-    last_frame: usize
+    pub left: Vec<f32>,
+    pub right: Vec<f32>,
+    pub playhead: usize,
+    pub length: usize,
+    pub last_frame: usize
 
 }
 
@@ -50,6 +50,7 @@ impl AudioSequence {
 	    //transport paused
 	    return ret
 	}
+//	println!("hi");
 	for i in 0..nframes {
 	    //	    println!("{}", self.playhead);
 	    //blech
@@ -78,3 +79,4 @@ impl AudioSequence {
 	ret
     }
 }
+
