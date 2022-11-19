@@ -60,7 +60,7 @@ impl AudioSequence {
 
 			Some(r) => {
 //			    println!("data {:?}", (*l, *r));
-			    ret.push((*l, *r));
+			    ret.push((*l * 0.8, *r * 0.8));
 			},
 			_ => ()
 		    }

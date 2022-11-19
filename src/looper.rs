@@ -66,18 +66,6 @@ impl Looper {
 
 	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(self.jack_client_addr);
 
-
-	//deleteme
-			let wave_table_l = sine_wave_generator(440.0, 10000, 48000);
-		let wave_table_r = sine_wave_generator(440.0, 10000, 48000);
-		let mut sine_sequence = AudioSequence { track: 0,
-							left: wave_table_l,
-							right: wave_table_r,
-							playhead: 0,
-							length: 10000,
-							last_frame: 0
-		};
-
 	loop {
 	    // match self.ps_rx.try_recv(){
 	    // 	Ok(()) => (),
@@ -88,6 +76,18 @@ impl Looper {
 	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
 	    let mut b_scenes = self.scenes.borrow_mut();
 
+
+	    let mut pos_frame = 0;
+	    let mut pos = MaybeUninit::uninit().as_mut_ptr();
+	    unsafe {
+		j::jack_transport_query(client_pointer, pos);
+
+		pos_frame = (*pos).frame as usize;
+	    }
+	    
+
+
+	    
 	    match self.command_rx.try_recv() {
 		Ok(rm) => self.command_manager.process_midi(rm),
 		Err(_) => ()
@@ -103,19 +103,13 @@ impl Looper {
 		    let s = b_rec_seq.get(i).unwrap();
 		    let mut seq = b_aud_seq.get(*s).unwrap().borrow_mut();
 		    seq.stop_recording();
+
+		    //set the last beat frame for newly-playing sequences
+		    seq.last_frame = pos_frame;
 		    
-
-		    //also set the last beat frame for newly-playing sequences
-		    let mut pos = MaybeUninit::uninit().as_mut_ptr();
-		    unsafe {
-			j::jack_transport_query(client_pointer, pos);
-
-			seq.last_frame = (*pos).frame as usize;
-		    }
 		    // always autoplay new sequences
 		    b_play_seq.push(*s);
 		    println!("play new sequences: {:?}", b_play_seq);
-		    println!("pos frame: {}", seq.last_frame);
 		}
 		for _ in 0..b_rec_seq.len() {
 		    b_rec_seq.pop();
@@ -156,6 +150,7 @@ impl Looper {
 	    for _ in 0..8 {
 		track_bytes.push(Vec::<(f32, f32)>::new());
 	    }
+	    
 	    for s in b_play_seq.iter() {
 		let seq = b_aud_seq.get(*s).unwrap();
 
@@ -163,12 +158,9 @@ impl Looper {
 
 		let t = bseq.track;
 
-		let mut pos = MaybeUninit::uninit().as_mut_ptr();
 		unsafe {
-		     j::jack_transport_query(client_pointer, pos);
-
 		    //combine audio sequences in track
-		    let seq_out =  bseq.process_position((*pos).frame as usize);
+		    let seq_out =  bseq.process_position(pos_frame);
 		    
 		    let mut track_vec = track_bytes.get_mut(bseq.track).unwrap();
 		    if track_vec.len() == 0 {
@@ -178,9 +170,10 @@ impl Looper {
 			    if let Some(tup) = track_vec.get_mut(i) {
 				tup.0 = tup.0 + seq_out.get(i).unwrap().0;
 				tup.1 = tup.1 + seq_out.get(i).unwrap().1;
-			    } else {
-				track_vec.push(*seq_out.get(i).unwrap());
 			    }
+//			    else {
+//				track_vec.push(*seq_out.get(i).unwrap());
+//			    }
 			}
 		    }
 		}
@@ -190,7 +183,7 @@ impl Looper {
 	    for i in 0..2 {
 		let track_vec = track_bytes.get_mut(i).unwrap();
 		let (chan_l, chan_r) = self.audio_out_vec.get(i).unwrap();
-		for (l, r) in track_vec.as_slice() {
+		for (l, r) in track_vec.iter() {
 //		    println!("{}", *l);
 		    chan_l.try_send(*l);
 		    chan_r.try_send(*r);
