@@ -7,6 +7,7 @@ mod scene;
 mod track;
 mod sequence;
 mod midi_control;
+mod constants;
 
 use tokio;
 

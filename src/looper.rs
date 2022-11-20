@@ -2,6 +2,7 @@ use crossbeam_channel::*;
 use crate::command_manager::CommandManager;
 use crate::scene::Scene;
 use crate::track::*;
+use crate::constants::*;
 use crate::sequence::*;
 use st_lib::owned_midi::*;
 use std::rc::Rc;
@@ -11,7 +12,8 @@ use std::mem::MaybeUninit;
 
 
 pub struct Looper {
-    ps_rx: Receiver<()>,
+    start_record: Sender<usize>,
+    stop_record: Sender<usize>,
     command_rx: Receiver<OwnedMidi>,
     audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
@@ -25,7 +27,8 @@ pub struct Looper {
 
 impl Looper {
     pub fn new (
-	ps_rx: Receiver<()>,
+	start_record: Sender<usize>,
+	stop_record: Sender<usize>,
         command_rx: Receiver<OwnedMidi>,
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
@@ -47,7 +50,8 @@ impl Looper {
 	//make sequences
 	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
 	Looper {
-	    ps_rx,
+	    start_record,
+	    stop_record,
 	    command_rx, 
             audio_in_vec,
             midi_in_vec, 
@@ -58,7 +62,6 @@ impl Looper {
 	    scenes,
 	    audio_sequences
 	}
-
     }
     pub async fn start(mut self) {
 	let recording_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
@@ -67,16 +70,11 @@ impl Looper {
 	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(self.jack_client_addr);
 
 	loop {
-	    // match self.ps_rx.try_recv(){
-	    // 	Ok(()) => (),
-	    // 	Err(_) => continue
-	    // }
 	    let mut b_rec_seq = recording_sequences.borrow_mut();
 	    let mut b_play_seq = playing_sequences.borrow_mut();
 	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
 	    let mut b_scenes = self.scenes.borrow_mut();
-
-
+	    
 	    let mut pos_frame = 0;
 	    let mut pos = MaybeUninit::uninit().as_mut_ptr();
 	    unsafe {
@@ -85,30 +83,26 @@ impl Looper {
 		pos_frame = (*pos).frame as usize;
 	    }
 	    
-
-
-	    
 	    match self.command_rx.try_recv() {
 		Ok(rm) => self.command_manager.process_midi(rm),
 		Err(_) => ()
 	    }
 
-
 	    //go command
             if self.command_manager.go {
-
-
 		//first stop anything currently recording.
                 for i in 0..b_rec_seq.len() {
 		    let s = b_rec_seq.get(i).unwrap();
 		    let mut seq = b_aud_seq.get(*s).unwrap().borrow_mut();
-		    seq.stop_recording();
+//		    seq.stop_record();
 
 		    //set the last beat frame for newly-playing sequences
 		    seq.last_frame = pos_frame;
 		    
 		    // always autoplay new sequences
 		    b_play_seq.push(*s);
+		    //and tell jackio to stop sending on this track
+		    self.stop_record.send(*s);
 		    println!("play new sequences: {:?}", b_play_seq);
 		}
 		for _ in 0..b_rec_seq.len() {
@@ -117,6 +111,7 @@ impl Looper {
 
 		//create new sequences
                 for t_idx in self.command_manager.rec_tracks_idx.iter() {
+		    self.start_record.send(*t_idx);
 		    let mut new_seq = AudioSequence::new(*t_idx);
 		    b_aud_seq.push(RefCell::new(new_seq));
 		    let seq_idx = b_aud_seq.len() - 1;
@@ -147,7 +142,7 @@ impl Looper {
 	    }
 	    //playing sequences procedure
 	    let mut track_bytes = Vec::new();
-	    for _ in 0..8 {
+	    for _ in 0..AUDIO_TRACK_COUNT {
 		track_bytes.push(Vec::<(f32, f32)>::new());
 	    }
 	    
@@ -180,7 +175,7 @@ impl Looper {
 
 	    }
 
-	    for i in 0..2 {
+	    for i in 0..AUDIO_TRACK_COUNT {
 		let track_vec = track_bytes.get_mut(i).unwrap();
 		let (chan_l, chan_r) = self.audio_out_vec.get(i).unwrap();
 		for (l, r) in track_vec.iter() {

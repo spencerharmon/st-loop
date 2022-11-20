@@ -50,29 +50,17 @@ impl AudioSequence {
 	    //transport paused
 	    return ret
 	}
-//	println!("hi");
 	for i in 0..nframes {
 	    //	    println!("{}", self.playhead);
 	    //blech
-	    match self.left.get(self.playhead) {
-		Some(l) => {
-		    match self.right.get(self.playhead) {
+	    if let Some(l) = self.left.get(self.playhead) {
 
-			Some(r) => {
-//			    println!("data {:?}", (*l, *r));
-			    ret.push((*l * 0.8, *r * 0.8));
-			},
-			_ => ()
-		    }
-		},
-		_ => ()
+		if let Some(r) = self.right.get(self.playhead) {
+//		    println!("data {:?}", (*l, *r));
+		    ret.push((*l * 0.8, *r * 0.8));
+
+		}
 	    }
-	    // ret.push(
-	    // 	(
-	    // 	    *self.left.get(self.playhead).unwrap(),
-	    // 	    *self.right.get(self.playhead).unwrap()
-	    // 	)
-	    // );
 	    self.increment_playhead();
 	}
 	self.last_frame = pos_frame;
