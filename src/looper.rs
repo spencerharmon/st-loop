@@ -12,8 +12,10 @@ use std::mem::MaybeUninit;
 
 
 pub struct Looper {
-    start_record: Sender<usize>,
-    stop_record: Sender<usize>,
+    start_playing: Sender<usize>,
+    stop_playing: Sender<usize>,
+    start_recording: Sender<usize>,
+    stop_recording: Sender<usize>,
     command_rx: Receiver<OwnedMidi>,
     audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
@@ -27,8 +29,10 @@ pub struct Looper {
 
 impl Looper {
     pub fn new (
-	start_record: Sender<usize>,
-	stop_record: Sender<usize>,
+	start_playing: Sender<usize>,
+	stop_playing: Sender<usize>,
+	start_recording: Sender<usize>,
+	stop_recording: Sender<usize>,
         command_rx: Receiver<OwnedMidi>,
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
@@ -50,8 +54,10 @@ impl Looper {
 	//make sequences
 	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
 	Looper {
-	    start_record,
-	    stop_record,
+	    start_playing,
+	    stop_playing,
+	    start_recording,
+	    stop_recording,
 	    command_rx, 
             audio_in_vec,
             midi_in_vec, 
@@ -94,15 +100,19 @@ impl Looper {
                 for i in 0..b_rec_seq.len() {
 		    let s = b_rec_seq.get(i).unwrap();
 		    let mut seq = b_aud_seq.get(*s).unwrap().borrow_mut();
-//		    seq.stop_record();
+		    seq.stop_recording();
 
 		    //set the last beat frame for newly-playing sequences
 		    seq.last_frame = pos_frame;
 		    
 		    // always autoplay new sequences
 		    b_play_seq.push(*s);
+		    
 		    //and tell jackio to stop sending on this track
-		    self.stop_record.send(*s);
+		    //and start playing
+		    self.start_playing.try_send(seq.track);
+		    self.stop_recording.try_send(seq.track);
+
 		    println!("play new sequences: {:?}", b_play_seq);
 		}
 		for _ in 0..b_rec_seq.len() {
@@ -111,7 +121,7 @@ impl Looper {
 
 		//create new sequences
                 for t_idx in self.command_manager.rec_tracks_idx.iter() {
-		    self.start_record.send(*t_idx);
+		    self.start_recording.try_send(*t_idx);
 		    let mut new_seq = AudioSequence::new(*t_idx);
 		    b_aud_seq.push(RefCell::new(new_seq));
 		    let seq_idx = b_aud_seq.len() - 1;

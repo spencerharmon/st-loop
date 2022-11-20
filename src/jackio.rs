@@ -23,6 +23,10 @@ impl JackIO {
         let (start_recording_tx, start_recording_rx) = bounded(100);
         let (stop_recording_tx, stop_recording_rx) = bounded(100);
 
+	//same, but for playing tracks
+        let (start_playing_tx, start_playing_rx) = bounded(100);
+        let (stop_playing_tx, stop_playing_rx) = bounded(100);
+
 	//used by CommandManager
 	let (command_midi_tx, command_midi_rx) = bounded(100);
 
@@ -243,6 +247,10 @@ impl JackIO {
 	for _ in 0..AUDIO_TRACK_COUNT {
 	    recording.push(false);
 	}
+	let mut playing: Vec<bool> = Vec::new();
+	for _ in 0..AUDIO_TRACK_COUNT {
+	    playing.push(false);
+	}
 	let process = jack::ClosureProcessHandler::new(
             move |client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
 
@@ -260,6 +268,28 @@ impl JackIO {
 		loop {
 		    if let Ok(track) = stop_recording_rx.try_recv(){
 			if let Some(b) = recording.get_mut(track) {
+			    *b = false;
+			}
+		    } else {
+			break
+		    }
+		}		
+		//set playing tracks
+		loop {
+		    if let Ok(track) = start_playing_rx.try_recv(){
+			println!("Start playing: {}", track);
+			if let Some(b) = playing.get_mut(track) {
+			    *b = true;
+			}
+		    } else {
+			break
+		    }
+		}
+
+		loop {
+		    if let Ok(track) = stop_playing_rx.try_recv(){
+			println!("Stop playing: {}", track);
+			if let Some(b) = playing.get_mut(track) {
 			    *b = false;
 			}
 		    } else {
@@ -303,6 +333,8 @@ impl JackIO {
 		//channel by bloody channel
 
 		//track 0
+		if let Some(b) = playing.get(0) {
+		    if *b {
 		// write left output
 		for v in out_0_l.as_mut_slice(ps).iter_mut(){
 //		    *v = 0.0;
@@ -322,7 +354,12 @@ impl JackIO {
 		    }
 		}
 
+
+		    }
+		}
 		//track 1
+		if let Some(b) = playing.get(1) {
+		    if *b {
 		// write left output
 		for v in out_1_l.as_mut_slice(ps).iter_mut(){
 		    if let Ok(float) = out_l_rx_1.try_recv() {
@@ -340,7 +377,13 @@ impl JackIO {
 		    }
 		}
 
+
+		    }
+		}
+
 		//track 2
+		if let Some(b) = playing.get(2) {
+		    if *b {
 		// write left output
 		for v in out_2_l.as_mut_slice(ps).iter_mut(){
 		    if let Ok(float) = out_l_rx_2.try_recv() {
@@ -358,7 +401,12 @@ impl JackIO {
 		    }
 		}
 
+		    }
+		}
+
 		//track 3
+		if let Some(b) = playing.get(3) {
+		    if *b {
 		// write left output
 		for v in out_3_l.as_mut_slice(ps).iter_mut(){
 		    if let Ok(float) = out_l_rx_3.try_recv() {
@@ -375,8 +423,13 @@ impl JackIO {
 			break
 		    }
 		}
+
+		    }
+		}
 		
 		//track 4
+		if let Some(b) = playing.get(4) {
+		    if *b {
 		// write left output
 		for v in out_4_l.as_mut_slice(ps).iter_mut(){
 		    *v = 0.0;
@@ -391,7 +444,12 @@ impl JackIO {
                         *v = float;
 		    }
 		}
+
+		    }
+		}
 		//track 5
+		if let Some(b) = playing.get(5) {
+		    if *b {
 		// write left output
 		for v in out_5_l.as_mut_slice(ps).iter_mut(){
 		    *v = 0.0;
@@ -406,7 +464,12 @@ impl JackIO {
                         *v = float;
 		    }
 		}
+
+		    }
+		}
 		//track 6
+		if let Some(b) = playing.get(6) {
+		    if *b {
 		// write left output
 		for v in out_6_l.as_mut_slice(ps).iter_mut(){
 		    *v = 0.0;
@@ -421,7 +484,12 @@ impl JackIO {
                         *v = float;
 		    }
 		}
+
+		    }
+		}
 		//track 7
+		if let Some(b) = playing.get(7) {
+		    if *b {
 		// write left output
 		for v in out_7_l.as_mut_slice(ps).iter_mut(){
 		    *v = 0.0;
@@ -436,12 +504,17 @@ impl JackIO {
                         *v = float;
 		    }
 		}
+
+		    }
+		}
                 jack::Control::Continue
             },
         );
         let active_client = client.activate_async((), process).unwrap();
 
 	let mut looper = Looper::new(
+	    start_playing_tx,
+	    stop_playing_tx,
 	    start_recording_tx,
 	    stop_recording_tx,
 	    command_midi_rx,
