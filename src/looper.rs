@@ -25,6 +25,7 @@ pub struct Looper {
     command_manager: CommandManager,
     scenes: Rc<RefCell<Vec<Scene>>>,
     audio_sequences: Rc<RefCell<Vec<RefCell<AudioSequence>>>>,
+    sync: st_sync::client::Client
 }
 
 impl Looper {
@@ -53,6 +54,10 @@ impl Looper {
 
 	//make sequences
 	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
+
+	//st-sync client
+	let sync = st_sync::client::Client::new();
+	
 	Looper {
 	    start_playing,
 	    stop_playing,
@@ -66,7 +71,8 @@ impl Looper {
 	    jack_client_addr,
 	    command_manager,
 	    scenes,
-	    audio_sequences
+	    audio_sequences,
+	    sync
 	}
     }
     pub async fn start(mut self) {
@@ -75,20 +81,35 @@ impl Looper {
 
 	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(self.jack_client_addr);
 
+	let mut next_beat_frame = (&self).get_first_beat_frame();
+	
+
 	loop {
+	    
 	    let mut b_rec_seq = recording_sequences.borrow_mut();
 	    let mut b_play_seq = playing_sequences.borrow_mut();
 	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
 	    let mut b_scenes = self.scenes.borrow_mut();
 	    
 	    let mut pos_frame = 0;
+	    let mut beats_per_bar = 0;
 	    let mut pos = MaybeUninit::uninit().as_mut_ptr();
+	    
 	    unsafe {
 		j::jack_transport_query(client_pointer, pos);
 
 		pos_frame = (*pos).frame as usize;
+		beats_per_bar = (*pos).beats_per_bar as usize;
 	    }
-	    
+
+	    if pos_frame >= next_beat_frame {
+
+		if let Ok(frame) = (&self).sync.recv_next_beat_frame() {
+
+		    next_beat_frame = frame as usize;
+
+		}
+	    }
 	    match self.command_rx.try_recv() {
 		Ok(rm) => self.command_manager.process_midi(rm),
 		Err(_) => ()
@@ -122,7 +143,7 @@ impl Looper {
 		//create new sequences
                 for t_idx in self.command_manager.rec_tracks_idx.iter() {
 		    self.start_recording.try_send(*t_idx);
-		    let mut new_seq = AudioSequence::new(*t_idx);
+		    let mut new_seq = AudioSequence::new(*t_idx, beats_per_bar);
 		    b_aud_seq.push(RefCell::new(new_seq));
 		    let seq_idx = b_aud_seq.len() - 1;
                     b_rec_seq.push(seq_idx);
@@ -145,7 +166,7 @@ impl Looper {
 		//		println!("try process record");
 		//probably use unwrap and allow this to panic.
 		match in_stereo_tup_chan.try_recv() {
-		    Ok(data) => bseq.process_record(data),
+		    Ok(data) => bseq.process_record(data, pos_frame, next_beat_frame),
 		    Err(_) => ()
 		}
 
@@ -165,7 +186,7 @@ impl Looper {
 
 		unsafe {
 		    //combine audio sequences in track
-		    let seq_out =  bseq.process_position(pos_frame);
+		    if let Some(seq_out) = bseq.process_position(pos_frame, next_beat_frame){
 		    
 		    let mut track_vec = track_bytes.get_mut(bseq.track).unwrap();
 		    if track_vec.len() == 0 {
@@ -181,7 +202,8 @@ impl Looper {
 //			    }
 			}
 		    }
-		}
+		    }
+		}//unsafe
 
 	    }
 
@@ -196,4 +218,11 @@ impl Looper {
 	    }
 	}//loop
     }//fn start
+    fn get_first_beat_frame(&self) -> usize {
+	loop {
+	    if let Ok(frame) = self.sync.recv_next_beat_frame() {
+		return frame as usize
+	    }
+	}
+    }
 }

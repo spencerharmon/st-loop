@@ -15,8 +15,8 @@ impl AudioTrack {
 	//self.outputs.send(tup);
 	()
     }
-    pub fn new_sequence(n: usize) -> AudioSequence {
-	AudioSequence::new(n)
-    }
+    // pub fn new_sequence(n: usize) -> AudioSequence {
+    // 	AudioSequence::new(n)
+    // }
 }
 

@@ -247,6 +247,7 @@ dependencies = [
  "crossbeam-channel",
  "jack",
  "st_lib",
+ "st_sync",
  "tokio",
  "wmidi",
 ]
@@ -254,6 +255,14 @@ dependencies = [
 [[package]]
 name = "st_lib"
 version = "0.1.0"
+
+[[package]]
+name = "st_sync"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "tokio",
+]
 
 [[package]]
 name = "syn"
