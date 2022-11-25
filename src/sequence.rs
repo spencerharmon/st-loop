@@ -89,7 +89,7 @@ impl AudioSequence {
 
 		if let Some(r) = self.right.get(self.playhead) {
 //		    println!("data {:?}", (*l, *r));
-		    ret.push((*l * 0.8, *r * 0.8));
+		    ret.push((*l, *r));
 
 		}
 	    } 

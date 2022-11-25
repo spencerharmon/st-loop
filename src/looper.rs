@@ -117,9 +117,6 @@ impl Looper {
 		    let s = b_rec_seq.get(i).unwrap();
 		    let mut seq = b_aud_seq.get(*s).unwrap().borrow_mut();
 		    seq.stop_recording();
-
-		    //set the last beat frame for newly-playing sequences
-		    seq.last_frame = pos_frame;
 		    
 		    // always autoplay new sequences
 		    b_play_seq.push(*s);
