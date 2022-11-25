@@ -35,14 +35,7 @@ impl AudioSequence {
 			n_beats
 	}
     }
-    
-    fn increment_playhead(&mut self) {
-	if self.playhead >= self.length {
-	    self.playhead = 0;
-	} else {
-	    self.playhead = self.playhead + 1;
-	}
-    }
+
     pub fn process_record(&mut self, tup: (f32, f32), pos_frame: usize, next_beat_frame: usize) {
 	self.left.push(tup.0);
 	self.right.push(tup.1);
@@ -98,28 +91,31 @@ impl AudioSequence {
 //		    println!("data {:?}", (*l, *r));
 		    ret.push((*l * 0.8, *r * 0.8));
 
-		} else {
-		    println!("no data r");
 		}
 	    } 
 	    if beat_this_cycle && i == beat_frame {
 		println!("beat");
 		if self.beat_counter == self.n_beats {
 		    self.beat_counter = 1;
-//		    self.playhead = self.playhead + 1;
+		    self.playhead = self.playhead + 1;
 		} else {
 		    self.beat_counter = self.beat_counter + 1;
-//		    self.playhead = self.playhead + 1;
+		    self.playhead = self.playhead + 1;
 		}
 		if final_beat {
 		    self.playhead = 0;
 		}
+	    } else {
+		self.playhead = self.playhead + 1;
 	    }
-
-	    self.playhead = self.playhead + 1;
 	}
+	
 	self.last_frame = pos_frame;
-	Some(ret)
+	if ret.len() == 0 {
+	    None
+	} else {
+	    Some(ret)
+	}
     }
 }
 

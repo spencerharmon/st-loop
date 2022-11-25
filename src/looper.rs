@@ -103,18 +103,13 @@ impl Looper {
 	    }
 
 	    if pos_frame >= next_beat_frame {
-
+//		println!("checking");
 		if let Ok(frame) = (&self).sync.recv_next_beat_frame() {
-
 		    next_beat_frame = frame as usize;
-
+//		    println!("next beat frame: {}", next_beat_frame);
+//		    println!("pos frame: {}", pos_frame);
 		}
 	    }
-	    match self.command_rx.try_recv() {
-		Ok(rm) => self.command_manager.process_midi(rm),
-		Err(_) => ()
-	    }
-
 	    //go command
             if self.command_manager.go {
 		//first stop anything currently recording.
@@ -189,6 +184,7 @@ impl Looper {
 		    if let Some(seq_out) = bseq.process_position(pos_frame, next_beat_frame){
 		    
 		    let mut track_vec = track_bytes.get_mut(bseq.track).unwrap();
+
 		    if track_vec.len() == 0 {
 			*track_vec = seq_out;
 		    } else {
@@ -212,10 +208,17 @@ impl Looper {
 		let (chan_l, chan_r) = self.audio_out_vec.get(i).unwrap();
 		for (l, r) in track_vec.iter() {
 //		    println!("{}", *l);
-		    chan_l.try_send(*l);
-		    chan_r.try_send(*r);
+		    chan_l.send(*l);
+		    chan_r.send(*r);
 		}
 	    }
+
+	    //process new commands
+	    match self.command_rx.try_recv() {
+		Ok(rm) => self.command_manager.process_midi(rm),
+		Err(_) => ()
+	    }
+
 	}//loop
     }//fn start
     fn get_first_beat_frame(&self) -> usize {
