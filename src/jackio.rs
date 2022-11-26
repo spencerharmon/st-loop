@@ -159,9 +159,9 @@ impl JackIO {
 
 
 	//channel 0
-	let (out_l_tx_0, out_l_rx_0) = bounded(1000);
-	let (out_r_tx_0, out_r_rx_0) = bounded(1000);
-	let (in_tx_0, in_rx_0) = bounded(1000);
+	let (out_l_tx_0, out_l_rx_0) = unbounded();
+	let (out_r_tx_0, out_r_rx_0) = unbounded();
+	let (in_tx_0, in_rx_0) = unbounded();
 	
 	audio_out_rx_channels.push((&out_l_rx_0, &out_r_rx_0));
 	audio_out_tx_channels.push((out_l_tx_0, out_r_tx_0));
@@ -169,9 +169,9 @@ impl JackIO {
 	audio_in_tx_channels.push(in_tx_0);
 	
 	//channel 1
-	let (out_l_tx_1, out_l_rx_1) = bounded(1000);
-	let (out_r_tx_1, out_r_rx_1) = bounded(1000);
-	let (in_tx_1, in_rx_1) = bounded(1000);
+	let (out_l_tx_1, out_l_rx_1) = unbounded();
+	let (out_r_tx_1, out_r_rx_1) = unbounded();
+	let (in_tx_1, in_rx_1) = unbounded();
 	
 	audio_out_rx_channels.push((&out_l_rx_1, &out_r_rx_1));
 	audio_out_tx_channels.push((out_l_tx_1, out_r_tx_1));
@@ -179,9 +179,9 @@ impl JackIO {
 	audio_in_tx_channels.push(in_tx_1);
 
 	//channel 2
-	let (out_l_tx_2, out_l_rx_2) = bounded(1000);
-	let (out_r_tx_2, out_r_rx_2) = bounded(1000);
-	let (in_tx_2, in_rx_2) = bounded(1000);
+	let (out_l_tx_2, out_l_rx_2) = unbounded();
+	let (out_r_tx_2, out_r_rx_2) = unbounded();
+	let (in_tx_2, in_rx_2) = unbounded();
 	
 	audio_out_rx_channels.push((&out_l_rx_2, &out_r_rx_2));
 	audio_out_tx_channels.push((out_l_tx_2, out_r_tx_2));
@@ -189,9 +189,9 @@ impl JackIO {
 	audio_in_tx_channels.push(in_tx_2);
 
 	//channel 3
-	let (out_l_tx_3, out_l_rx_3) = bounded(1000);
-	let (out_r_tx_3, out_r_rx_3) = bounded(1000);
-	let (in_tx_3, in_rx_3) = bounded(1000);
+	let (out_l_tx_3, out_l_rx_3) = unbounded();
+	let (out_r_tx_3, out_r_rx_3) = unbounded();
+	let (in_tx_3, in_rx_3) = unbounded();
 	
 	audio_out_rx_channels.push((&out_l_rx_3, &out_r_rx_3));
 	audio_out_tx_channels.push((out_l_tx_3, out_r_tx_3));
@@ -199,9 +199,9 @@ impl JackIO {
 	audio_in_tx_channels.push(in_tx_3);
 
 	//channel 4
-	let (out_l_tx_4, out_l_rx_4) = bounded(1000);
-	let (out_r_tx_4, out_r_rx_4) = bounded(1000);
-	let (in_tx_4, in_rx_4) = bounded(1000);
+	let (out_l_tx_4, out_l_rx_4) = unbounded();
+	let (out_r_tx_4, out_r_rx_4) = unbounded();
+	let (in_tx_4, in_rx_4) = unbounded();
 	
 	audio_out_rx_channels.push((&out_l_rx_4, &out_r_rx_4));
 	audio_out_tx_channels.push((out_l_tx_4, out_r_tx_4));
@@ -209,9 +209,9 @@ impl JackIO {
 	audio_in_tx_channels.push(in_tx_4);
 
 	//channel 5
-	let (out_l_tx_5, out_l_rx_5) = bounded(1000);
-	let (out_r_tx_5, out_r_rx_5) = bounded(1000);
-	let (in_tx_5, in_rx_5) = bounded(1000);
+	let (out_l_tx_5, out_l_rx_5) = unbounded();
+	let (out_r_tx_5, out_r_rx_5) = unbounded();
+	let (in_tx_5, in_rx_5) = unbounded();
 	
 	audio_out_rx_channels.push((&out_l_rx_5, &out_r_rx_5));
 	audio_out_tx_channels.push((out_l_tx_5, out_r_tx_5));
@@ -219,9 +219,9 @@ impl JackIO {
 	audio_in_tx_channels.push(in_tx_5);
 
 	//channel 6
-	let (out_l_tx_6, out_l_rx_6) = bounded(1000);
-	let (out_r_tx_6, out_r_rx_6) = bounded(1000);
-	let (in_tx_6, in_rx_6) = bounded(1000);
+	let (out_l_tx_6, out_l_rx_6) = unbounded();
+	let (out_r_tx_6, out_r_rx_6) = unbounded();
+	let (in_tx_6, in_rx_6) = unbounded();
 	
 	audio_out_rx_channels.push((&out_l_rx_6, &out_r_rx_6));
 	audio_out_tx_channels.push((out_l_tx_6, out_r_tx_6));
@@ -229,9 +229,9 @@ impl JackIO {
 	audio_in_tx_channels.push(in_tx_6);
 
 	//channel 7
-	let (out_l_tx_7, out_l_rx_7) = bounded(1000);
-	let (out_r_tx_7, out_r_rx_7) = bounded(1000);
-	let (in_tx_7, in_rx_7) = bounded(1000);
+	let (out_l_tx_7, out_l_rx_7) = unbounded();
+	let (out_r_tx_7, out_r_rx_7) = unbounded();
+	let (in_tx_7, in_rx_7) = unbounded();
 	
 	audio_out_rx_channels.push((&out_l_rx_7, &out_r_rx_7));
 	audio_out_tx_channels.push((out_l_tx_7, out_r_tx_7));

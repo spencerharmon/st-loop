@@ -83,6 +83,18 @@ impl Looper {
 
 	let mut next_beat_frame = (&self).get_first_beat_frame();
 	
+	let mut beat_this_cycle = false;
+
+
+	let mut pos = MaybeUninit::uninit().as_mut_ptr();
+
+
+	let mut pos_frame = 0;
+	unsafe {
+	    j::jack_transport_query(client_pointer, pos);
+	    pos_frame = (*pos).frame as usize;
+	}
+	let mut last_frame = pos_frame;
 
 	loop {
 	    
@@ -91,16 +103,17 @@ impl Looper {
 	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
 	    let mut b_scenes = self.scenes.borrow_mut();
 	    
-	    let mut pos_frame = 0;
 	    let mut beats_per_bar = 0;
-	    let mut pos = MaybeUninit::uninit().as_mut_ptr();
+	    let mut beat = 0;
 	    
 	    unsafe {
 		j::jack_transport_query(client_pointer, pos);
 
 		pos_frame = (*pos).frame as usize;
 		beats_per_bar = (*pos).beats_per_bar as usize;
+		beat = (*pos).beat as usize;
 	    }
+	    let nframes = pos_frame - last_frame;
 
 	    if pos_frame >= next_beat_frame {
 //		println!("checking");
@@ -110,43 +123,63 @@ impl Looper {
 //		    println!("pos frame: {}", pos_frame);
 		}
 	    }
+	    beat_this_cycle = false;
+	    if (((last_frame < next_beat_frame) &&
+		(next_beat_frame <= pos_frame))) ||
+		last_frame == 0 {
+		    beat_this_cycle = true;
+
+    		}
+
+	    
 	    //go command
             if self.command_manager.go {
-		//first stop anything currently recording.
                 for i in 0..b_rec_seq.len() {
+		    //go command stops recording before bar boundary.
 		    let s = b_rec_seq.get(i).unwrap();
 		    let mut seq = b_aud_seq.get(*s).unwrap().borrow_mut();
-		    seq.stop_recording();
+		    if seq.recording {
+			seq.stop_recording();
+			
+			//tell jackio to stop sending on this track
+			self.stop_recording.try_send(seq.track);
+		    }
 		    
-		    // always autoplay new sequences
-		    b_play_seq.push(*s);
+		    //bar boundary
+		    if beat == beats_per_bar && beat_this_cycle {
+			// always autoplay new sequences
+			b_play_seq.push(*s);
+
+			seq.last_frame = pos_frame;
 		    
-		    //and tell jackio to stop sending on this track
-		    //and start playing
-		    self.start_playing.try_send(seq.track);
-		    self.stop_recording.try_send(seq.track);
-
-		    println!("play new sequences: {:?}", b_play_seq);
+			//tell jackio to start receiving output
+			self.start_playing.try_send(seq.track);
+			println!("play new sequences: {:?}", b_play_seq);
+		    }
 		}
-		for _ in 0..b_rec_seq.len() {
-		    b_rec_seq.pop();
+		//bar boundary behavior
+		if beat == beats_per_bar && beat_this_cycle {
+		    for _ in 0..b_rec_seq.len() {
+			b_rec_seq.pop();
+		    }
+
+		    //create new sequences
+		    for t_idx in self.command_manager.rec_tracks_idx.iter() {
+			self.start_recording.try_send(*t_idx);
+			let mut new_seq = AudioSequence::new(*t_idx, beats_per_bar, last_frame);
+			b_aud_seq.push(RefCell::new(new_seq));
+			let seq_idx = b_aud_seq.len() - 1;
+			b_rec_seq.push(seq_idx);
+			for s_idx in self.command_manager.rec_scenes_idx.iter() {
+			    let mut scene = b_scenes.get_mut(*s_idx).unwrap();
+			    scene.add_sequence(seq_idx);
+			}
+		    }
+		    self.command_manager.clear();
 		}
 
-		//create new sequences
-                for t_idx in self.command_manager.rec_tracks_idx.iter() {
-		    self.start_recording.try_send(*t_idx);
-		    let mut new_seq = AudioSequence::new(*t_idx, beats_per_bar);
-		    b_aud_seq.push(RefCell::new(new_seq));
-		    let seq_idx = b_aud_seq.len() - 1;
-                    b_rec_seq.push(seq_idx);
-                    for s_idx in self.command_manager.rec_scenes_idx.iter() {
-			let mut scene = b_scenes.get_mut(*s_idx).unwrap();
-			scene.add_sequence(seq_idx);
-                    }
-		}
-
-                self.command_manager.clear();
             }
+	    
 	    
 	    //recording sequences procedure
 	    for s in b_rec_seq.iter() {
@@ -157,12 +190,23 @@ impl Looper {
 		let in_stereo_tup_chan = self.audio_in_vec.get(t).unwrap();
 		//		println!("try process record");
 		//probably use unwrap and allow this to panic.
-		match in_stereo_tup_chan.try_recv() {
-		    Ok(data) => bseq.process_record(data, pos_frame, next_beat_frame),
-		    Err(_) => ()
+		let mut data = Vec::new();
+		if in_stereo_tup_chan.len() >= nframes {
+		    for i in 0..nframes {
+			if let Ok(samples) = in_stereo_tup_chan.try_recv() {
+			    data.push(samples);
+			}
+		    }
 		}
 
+		if beat_this_cycle {
+		    bseq.observe_beat();
+		}
+		for sample_pair in data {
+		    bseq.process_record(sample_pair);
+		}
 	    }
+	    
 	    //playing sequences procedure
 	    let mut track_bytes = Vec::new();
 	    for _ in 0..AUDIO_TRACK_COUNT {
@@ -173,12 +217,16 @@ impl Looper {
 		let seq = b_aud_seq.get(*s).unwrap();
 
 		let mut bseq = seq.borrow_mut();
-
+		if beat_this_cycle {
+		    bseq.observe_beat();
+		}
+		
 		let t = bseq.track;
+
 
 		unsafe {
 		    //combine audio sequences in track
-		    if let Some(seq_out) = bseq.process_position(pos_frame, next_beat_frame){
+		    if let Some(seq_out) = bseq.process_position(pos_frame){
 		    
 		    let mut track_vec = track_bytes.get_mut(bseq.track).unwrap();
 
@@ -215,7 +263,7 @@ impl Looper {
 		Ok(rm) => self.command_manager.process_midi(rm),
 		Err(_) => ()
 	    }
-
+	    last_frame = pos_frame
 	}//loop
     }//fn start
     fn get_first_beat_frame(&self) -> usize {
