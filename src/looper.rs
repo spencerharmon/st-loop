@@ -146,39 +146,33 @@ impl Looper {
 			self.stop_recording.try_send(seq.track);
 		    }
 		    
-		    //bar boundary
-//		    if beat == beats_per_bar - 1 && beat_this_cycle {
-			// always autoplay new sequences
-			seq.start_playing(pos_frame);
-			b_play_seq.push(*s);
+		    // always autoplay new sequences
+		    seq.start_playing(pos_frame);
+		    b_play_seq.push(*s);
 
-		    
-			//tell jackio to start receiving output
-			self.start_playing.try_send(seq.track);
-			println!("play new sequences: {:?}", b_play_seq);
-//		    }
+
+		    //tell jackio to start receiving output
+		    self.start_playing.try_send(seq.track);
+		    println!("play new sequences: {:?}", b_play_seq);
 		}
-		//bar boundary behavior
-//		if beat == beats_per_bar - 1 && beat_this_cycle {
-		    for _ in 0..b_rec_seq.len() {
-			b_rec_seq.pop();
-		    }
 
-		    //create new sequences
-		    for t_idx in self.command_manager.rec_tracks_idx.iter() {
-			self.start_recording.try_send(*t_idx);
-			let mut new_seq = AudioSequence::new(*t_idx, beats_per_bar, last_frame);
-			b_aud_seq.push(RefCell::new(new_seq));
-			let seq_idx = b_aud_seq.len() - 1;
-			b_rec_seq.push(seq_idx);
-			for s_idx in self.command_manager.rec_scenes_idx.iter() {
-			    let mut scene = b_scenes.get_mut(*s_idx).unwrap();
-			    scene.add_sequence(seq_idx);
-			}
-		    }
-		    self.command_manager.clear();
-//		}
+		for _ in 0..b_rec_seq.len() {
+		    b_rec_seq.pop();
+		}
 
+		//create new sequences
+		for t_idx in self.command_manager.rec_tracks_idx.iter() {
+		    self.start_recording.try_send(*t_idx);
+		    let mut new_seq = AudioSequence::new(*t_idx, beats_per_bar, last_frame);
+		    b_aud_seq.push(RefCell::new(new_seq));
+		    let seq_idx = b_aud_seq.len() - 1;
+		    b_rec_seq.push(seq_idx);
+		    for s_idx in self.command_manager.rec_scenes_idx.iter() {
+			let mut scene = b_scenes.get_mut(*s_idx).unwrap();
+			scene.add_sequence(seq_idx);
+		    }
+		}
+		self.command_manager.clear();
             }
 	    
 	    

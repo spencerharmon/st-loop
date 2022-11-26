@@ -12,7 +12,6 @@ pub struct AudioSequence {
     pub last_frame: usize,
     pub beat_counter: usize,
     pub n_beats: usize,
-    pub beat: usize,
     pub recording_delay: bool,
     pub playing_delay: bool,
     pub recording: bool
@@ -27,7 +26,6 @@ impl AudioSequence {
 	let playhead = 0;
 	let beat_counter = 1;
 	let n_beats = 0;
-	let beat = 0;
 	let recording_delay = true;
 	let playing_delay = true;
 	let recording = true;
@@ -41,7 +39,6 @@ impl AudioSequence {
 			last_frame,
 			beat_counter,
 			n_beats,
-			beat,
 			recording_delay,
 			playing_delay,
 			recording
@@ -52,12 +49,7 @@ impl AudioSequence {
 	if !self.recording || self.recording_delay {
 	    return
 	}
-	// if self.recording_delay && beat {
-	//     self.recording_delay = false;
-	// } else {
-	//     return
-	// }
-//	println!("sample: {}", sample_pair.0);
+
 	self.left.push(sample_pair.0);
 	self.right.push(sample_pair.1);
 	self.length = self.length + 1;
@@ -67,7 +59,6 @@ impl AudioSequence {
     pub fn observe_beat(&mut self, beat: usize) {
 	println!("beat: {}", beat);
 	if self.recording {
-	    self.beat = beat;
 	    if beat == 1 {
 		self.recording_delay = false;
 	    }
@@ -75,7 +66,6 @@ impl AudioSequence {
 		self.n_beats = self.n_beats + 1;
 	    }
 	} else {
-	    self.beat = beat;
 	    if self.beat_counter == self.n_beats {
 		self.playhead = 0;
 		self.beat_counter = 1;
