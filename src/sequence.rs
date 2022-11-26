@@ -12,7 +12,9 @@ pub struct AudioSequence {
     pub last_frame: usize,
     pub beat_counter: usize,
     pub n_beats: usize,
-    pub startup_delay: bool,
+    pub beat: usize,
+    pub recording_delay: bool,
+    pub playing_delay: bool,
     pub recording: bool
 	
 }
@@ -25,7 +27,9 @@ impl AudioSequence {
 	let playhead = 0;
 	let beat_counter = 1;
 	let n_beats = 0;
-	let startup_delay = true;
+	let beat = 0;
+	let recording_delay = true;
+	let playing_delay = true;
 	let recording = true;
 	
 	AudioSequence { track,
@@ -37,17 +41,19 @@ impl AudioSequence {
 			last_frame,
 			beat_counter,
 			n_beats,
-			startup_delay,
+			beat,
+			recording_delay,
+			playing_delay,
 			recording
 	}
     }
 
     pub fn process_record(&mut self, sample_pair: (f32, f32)) {
-	if !self.recording || self.startup_delay {
+	if !self.recording || self.recording_delay {
 	    return
 	}
-	// if self.startup_delay && beat {
-	//     self.startup_delay = false;
+	// if self.recording_delay && beat {
+	//     self.recording_delay = false;
 	// } else {
 	//     return
 	// }
@@ -55,23 +61,28 @@ impl AudioSequence {
 	self.left.push(sample_pair.0);
 	self.right.push(sample_pair.1);
 	self.length = self.length + 1;
+	self.playhead = self.playhead + 1;
     }
 
-    pub fn observe_beat(&mut self) {
+    pub fn observe_beat(&mut self, beat: usize) {
+	println!("beat: {}", beat);
 	if self.recording {
-	    self.startup_delay = false;
-	    self.n_beats = self.n_beats + 1;
+	    self.beat = beat;
+	    if beat == 1 {
+		self.recording_delay = false;
+	    }
+	    if !self.recording_delay {
+		self.n_beats = self.n_beats + 1;
+	    }
 	} else {
-
+	    self.beat = beat;
 	    if self.beat_counter == self.n_beats {
+		self.playhead = 0;
 		self.beat_counter = 1;
 	    } else {
-		self.beat_counter = self.beat_counter + 1;
+	     	self.beat_counter = self.beat_counter + 1;
 	    }
-	    let final_beat = self.beat_counter == self.n_beats;
-	    if final_beat {
-		self.playhead = 0;
-	    }
+	    println!("beat counter: {}", self.beat_counter);
 	}
     }
 
@@ -79,9 +90,14 @@ impl AudioSequence {
 	if !self.recording {
 	    return
 	}
+	self.beat_counter = self.n_beats;
 	self.n_beats = (self.n_beats - (self.n_beats % self.beats_per_bar)) + self.beats_per_bar;
 	self.recording = false;
 	println!("stop recording. Beat length: {}", self.n_beats);
+    }
+    pub fn start_playing(&mut self, frame: usize) {
+	self.last_frame = frame;
+	self.playing_delay = true;
     }
     
     pub fn process_position(&mut self,
@@ -91,7 +107,14 @@ impl AudioSequence {
 	if nframes == 0 {
 	    return None
 	}
-	
+	if self.beat_counter == 1 {
+//	    println!("playing delay off-----------------");
+	    self.playing_delay = false;
+	}
+	if self.playing_delay {
+	    return None
+	}
+
 	let mut ret = Vec::new();
 
 	for i in 1..nframes + 1 {

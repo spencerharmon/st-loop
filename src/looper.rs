@@ -96,6 +96,9 @@ impl Looper {
 	}
 	let mut last_frame = pos_frame;
 
+	let mut beats_per_bar = 0;
+
+	let mut beat = 0;
 	loop {
 	    
 	    let mut b_rec_seq = recording_sequences.borrow_mut();
@@ -103,8 +106,6 @@ impl Looper {
 	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
 	    let mut b_scenes = self.scenes.borrow_mut();
 	    
-	    let mut beats_per_bar = 0;
-	    let mut beat = 0;
 	    
 	    unsafe {
 		j::jack_transport_query(client_pointer, pos);
@@ -146,19 +147,19 @@ impl Looper {
 		    }
 		    
 		    //bar boundary
-		    if beat == beats_per_bar && beat_this_cycle {
+//		    if beat == beats_per_bar - 1 && beat_this_cycle {
 			// always autoplay new sequences
+			seq.start_playing(pos_frame);
 			b_play_seq.push(*s);
 
-			seq.last_frame = pos_frame;
 		    
 			//tell jackio to start receiving output
 			self.start_playing.try_send(seq.track);
 			println!("play new sequences: {:?}", b_play_seq);
-		    }
+//		    }
 		}
 		//bar boundary behavior
-		if beat == beats_per_bar && beat_this_cycle {
+//		if beat == beats_per_bar - 1 && beat_this_cycle {
 		    for _ in 0..b_rec_seq.len() {
 			b_rec_seq.pop();
 		    }
@@ -176,7 +177,7 @@ impl Looper {
 			}
 		    }
 		    self.command_manager.clear();
-		}
+//		}
 
             }
 	    
@@ -200,7 +201,7 @@ impl Looper {
 		}
 
 		if beat_this_cycle {
-		    bseq.observe_beat();
+		    bseq.observe_beat(beat);
 		}
 		for sample_pair in data {
 		    bseq.process_record(sample_pair);
@@ -218,7 +219,7 @@ impl Looper {
 
 		let mut bseq = seq.borrow_mut();
 		if beat_this_cycle {
-		    bseq.observe_beat();
+		    bseq.observe_beat(beat);
 		}
 		
 		let t = bseq.track;
