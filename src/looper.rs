@@ -139,6 +139,11 @@ impl Looper {
 		    //go command stops recording before bar boundary.
 		    let s = b_rec_seq.get(i).unwrap();
 		    let mut seq = b_aud_seq.get(*s).unwrap().borrow_mut();
+		    // always autoplay new sequences
+		    seq.start_playing(pos_frame);
+		    b_play_seq.push(*s);
+
+		    // stop record after start play
 		    if seq.recording {
 			seq.stop_recording();
 			
@@ -146,9 +151,6 @@ impl Looper {
 			self.stop_recording.try_send(seq.track);
 		    }
 		    
-		    // always autoplay new sequences
-		    seq.start_playing(pos_frame);
-		    b_play_seq.push(*s);
 
 
 		    //tell jackio to start receiving output

@@ -8,6 +8,7 @@ pub struct AudioSequence {
     pub left: Vec<f32>,
     pub right: Vec<f32>,
     pub playhead: usize,
+    pub cycles_since_beat: usize,
     pub length: usize,
     pub last_frame: usize,
     pub beat_counter: usize,
@@ -24,6 +25,7 @@ impl AudioSequence {
 	let left = Vec::new();
 	let right = Vec::new();
 	let playhead = 0;
+	let cycles_since_beat = 0;
 	let beat_counter = 1;
 	let n_beats = 0;
 	let recording_delay = true;
@@ -35,6 +37,7 @@ impl AudioSequence {
 			left,
 			right,
 			playhead,
+			cycles_since_beat,
 			length,
 			last_frame,
 			beat_counter,
@@ -49,6 +52,7 @@ impl AudioSequence {
 	if !self.recording || self.recording_delay {
 	    return
 	}
+	self.cycles_since_beat = self.cycles_since_beat + 1;
 
 	self.left.push(sample_pair.0);
 	self.right.push(sample_pair.1);
@@ -58,12 +62,13 @@ impl AudioSequence {
 
     pub fn observe_beat(&mut self, beat: usize) {
 	println!("beat: {}", beat);
+	self.cycles_since_beat = 0;
 	if self.recording {
-	    if beat == 1 {
-		self.recording_delay = false;
-	    }
 	    if !self.recording_delay {
 		self.n_beats = self.n_beats + 1;
+	    }
+	    if beat == 1 {
+		self.recording_delay = false;
 	    }
 	} else {
 	    if self.beat_counter == self.n_beats {
@@ -80,8 +85,28 @@ impl AudioSequence {
 	if !self.recording {
 	    return
 	}
-	self.beat_counter = self.n_beats;
-	self.n_beats = (self.n_beats - (self.n_beats % self.beats_per_bar)) + self.beats_per_bar;
+	println!("n beats: {}", self.n_beats);
+	// 1 beat wiggle room after bar start
+	if self.n_beats % self.beats_per_bar == 0 {
+	    self.beat_counter = 1;
+	    //	    self.playhead = self.cycles_since_beat;
+	    self.playhead = self.cycles_since_beat;
+	    for _ in 0..self.cycles_since_beat {
+		self.left.pop();
+		self.right.pop();
+	    }
+	    //stop record goes after start play so we can override playing delay.
+	    self.playing_delay = false;
+	} else {
+	    self.beat_counter = self.n_beats + 1;
+	    self.n_beats = (self.n_beats - (self.n_beats % self.beats_per_bar)) + self.beats_per_bar;
+	}
+	
+	// if self.beat_counter % self.beats_per_bar == 1 {
+	//     self.n_beats = self.n_beats - 1;
+	// } else {
+	//     self.n_beats = (self.n_beats - (self.n_beats % self.beats_per_bar)) + self.beats_per_bar;
+	// }
 	self.recording = false;
 	println!("stop recording. Beat length: {}", self.n_beats);
     }
