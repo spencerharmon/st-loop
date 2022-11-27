@@ -99,6 +99,9 @@ impl Looper {
 	let mut beats_per_bar = 0;
 
 	let mut beat = 0;
+
+	//TODO: deleteme
+	let mut sequences_playing = 0;
 	loop {
 	    
 	    let mut b_rec_seq = recording_sequences.borrow_mut();
@@ -168,6 +171,7 @@ impl Looper {
 		    let mut new_seq = AudioSequence::new(*t_idx, beats_per_bar, last_frame);
 		    b_aud_seq.push(RefCell::new(new_seq));
 		    let seq_idx = b_aud_seq.len() - 1;
+		    b_aud_seq.get(seq_idx).unwrap().borrow_mut().set_id(seq_idx);
 		    b_rec_seq.push(seq_idx);
 		    for s_idx in self.command_manager.rec_scenes_idx.iter() {
 			let mut scene = b_scenes.get_mut(*s_idx).unwrap();
@@ -209,7 +213,14 @@ impl Looper {
 	    for _ in 0..AUDIO_TRACK_COUNT {
 		track_bytes.push(Vec::<(f32, f32)>::new());
 	    }
-	    
+
+	    if b_play_seq.len() != sequences_playing {
+		sequences_playing = b_play_seq.len();
+		println!(
+		    "changed sequences playing number: {} <-------------------------------------",
+		    sequences_playing
+		);
+	    }
 	    for s in b_play_seq.iter() {
 		let seq = b_aud_seq.get(*s).unwrap();
 
@@ -220,10 +231,8 @@ impl Looper {
 		
 		let t = bseq.track;
 
-
-		unsafe {
-		    //combine audio sequences in track
-		    if let Some(seq_out) = bseq.process_position(pos_frame){
+		//combine audio sequences in track
+		if let Some(seq_out) = bseq.process_position(nframes){
 		    
 		    let mut track_vec = track_bytes.get_mut(bseq.track).unwrap();
 
@@ -235,14 +244,9 @@ impl Looper {
 				tup.0 = tup.0 + seq_out.get(i).unwrap().0;
 				tup.1 = tup.1 + seq_out.get(i).unwrap().1;
 			    }
-//			    else {
-//				track_vec.push(*seq_out.get(i).unwrap());
-//			    }
 			}
 		    }
-		    }
-		}//unsafe
-
+		}
 	    }
 
 	    for i in 0..AUDIO_TRACK_COUNT {
@@ -250,8 +254,8 @@ impl Looper {
 		let (chan_l, chan_r) = self.audio_out_vec.get(i).unwrap();
 		for (l, r) in track_vec.iter() {
 //		    println!("{}", *l);
-		    chan_l.send(*l);
-		    chan_r.send(*r);
+		    chan_l.try_send(*l);
+		    chan_r.try_send(*r);
 		}
 	    }
 

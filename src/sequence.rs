@@ -15,7 +15,8 @@ pub struct AudioSequence {
     pub n_beats: usize,
     pub recording_delay: bool,
     pub playing_delay: bool,
-    pub recording: bool
+    pub recording: bool,
+    pub id: usize,
 	
 }
 
@@ -31,6 +32,7 @@ impl AudioSequence {
 	let recording_delay = true;
 	let playing_delay = true;
 	let recording = true;
+	let id = 0;
 	
 	AudioSequence { track,
 			beats_per_bar,
@@ -44,10 +46,14 @@ impl AudioSequence {
 			n_beats,
 			recording_delay,
 			playing_delay,
-			recording
+			recording,
+			id
 	}
     }
 
+    pub fn set_id(&mut self, id: usize) {
+	self.id = id;
+    }
     pub fn process_record(&mut self, sample_pair: (f32, f32)) {
 	if !self.recording || self.recording_delay {
 	    return
@@ -61,6 +67,7 @@ impl AudioSequence {
     }
 
     pub fn observe_beat(&mut self, beat: usize) {
+	println!("id: {}", self.id);
 	println!("beat: {}", beat);
 	self.cycles_since_beat = 0;
 	if self.recording {
@@ -72,11 +79,13 @@ impl AudioSequence {
 	    }
 	} else {
 	    if self.beat_counter == self.n_beats {
+		println!("reset playhead");
 		self.playhead = 0;
 		self.beat_counter = 1;
 	    } else {
 	     	self.beat_counter = self.beat_counter + 1;
 	    }
+	    println!("playhead: {}", self.playhead);
 	    println!("beat counter: {}", self.beat_counter);
 	}
     }
@@ -116,15 +125,20 @@ impl AudioSequence {
     }
     
     pub fn process_position(&mut self,
-			    pos_frame: usize
+			    nframes: usize
     ) -> Option<Vec<(f32, f32)>> {
-	let nframes = pos_frame - self.last_frame;
+//	let nframes = pos_frame - self.last_frame;
 	if nframes == 0 {
 	    return None
 	}
+	if nframes > 128 {
+	    println!("trouble");
+	}
 	if self.beat_counter == 1 {
-//	    println!("playing delay off-----------------");
-	    self.playing_delay = false;
+	    if self.playing_delay {
+		println!("playing delay off-----------------");
+		self.playing_delay = false;
+	    }
 	}
 	if self.playing_delay {
 	    return None
@@ -140,17 +154,21 @@ impl AudioSequence {
 //		    println!("data {:?}", (*l, *r));
 		    ret.push((*l, *r));
 
+		} else {
+		    ret.push((0.0, 0.0));
 		}
-	    } 
+	    } else {
+		ret.push((0.0, 0.0));
+	    }
+
+	    if self.playhead == 0 {
+		println!("reset playhead worked");
+	    }
 	    self.playhead = self.playhead + 1;
 	}
 
-	self.last_frame = pos_frame;
-	if ret.len() == 0 {
-	    None
-	} else {
-	    Some(ret)
-	}
+//	self.last_frame = pos_frame;
+	Some(ret)
     }
 }
 
