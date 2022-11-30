@@ -12,6 +12,7 @@ use std::mem::MaybeUninit;
 
 
 pub struct Looper {
+    ps_rx: Receiver<()>,
     start_playing: Sender<usize>,
     stop_playing: Sender<usize>,
     start_recording: Sender<usize>,
@@ -30,6 +31,7 @@ pub struct Looper {
 
 impl Looper {
     pub fn new (
+	ps_rx: Receiver<()>,
 	start_playing: Sender<usize>,
 	stop_playing: Sender<usize>,
 	start_recording: Sender<usize>,
@@ -59,6 +61,7 @@ impl Looper {
 	let sync = st_sync::client::Client::new();
 	
 	Looper {
+	    ps_rx,
 	    start_playing,
 	    stop_playing,
 	    start_recording,
@@ -102,6 +105,7 @@ impl Looper {
 
 	//TODO: deleteme
 	let mut sequences_playing = 0;
+	let mut governor_on = true;
 	loop {
 	    
 	    let mut b_rec_seq = recording_sequences.borrow_mut();
@@ -209,6 +213,10 @@ impl Looper {
 	    }
 	    
 	    //playing sequences procedure
+	    if let Ok(()) = self.ps_rx.try_recv(){
+		governor_on = false;
+	    }
+	    if !governor_on || beat_this_cycle {
 	    let mut track_bytes = Vec::new();
 	    for _ in 0..AUDIO_TRACK_COUNT {
 		track_bytes.push(Vec::<(f32, f32)>::new());
@@ -232,7 +240,7 @@ impl Looper {
 		let t = bseq.track;
 
 		//combine audio sequences in track
-		if let Some(seq_out) = bseq.process_position(nframes){
+		if let Some(seq_out) = bseq.process_position(nframes, pos_frame){
 		    
 		    let mut track_vec = track_bytes.get_mut(bseq.track).unwrap();
 
@@ -243,6 +251,8 @@ impl Looper {
 			    if let Some(tup) = track_vec.get_mut(i) {
 				tup.0 = tup.0 + seq_out.get(i).unwrap().0;
 				tup.1 = tup.1 + seq_out.get(i).unwrap().1;
+			    } else {
+				track_vec.push(*seq_out.get(i).unwrap());
 			    }
 			}
 		    }
@@ -252,11 +262,20 @@ impl Looper {
 	    for i in 0..AUDIO_TRACK_COUNT {
 		let track_vec = track_bytes.get_mut(i).unwrap();
 		let (chan_l, chan_r) = self.audio_out_vec.get(i).unwrap();
+		//todo: use fraction of sample rate
+		//set to lower number for bit crush distortion
+		if chan_l.len() > 1024 {
+		    governor_on = true;
+		}
+		// if beat_this_cycle {
+		//     println!("queue len: {}", chan_l.len());
+		// }
 		for (l, r) in track_vec.iter() {
 //		    println!("{}", *l);
 		    chan_l.try_send(*l);
 		    chan_r.try_send(*r);
 		}
+	    }
 	    }
 
 	    //process new commands

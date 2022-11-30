@@ -237,7 +237,8 @@ impl JackIO {
 	audio_out_tx_channels.push((out_l_tx_7, out_r_tx_7));
 	audio_in_rx_channels.push(in_rx_7);
 	audio_in_tx_channels.push(in_tx_7);
-	
+
+	let (ps_tx, ps_rx) = bounded(1);
         let mut command_midi_port = client
             .register_port("command", jack::MidiIn::default())
             .unwrap();
@@ -253,7 +254,11 @@ impl JackIO {
 	}
 	let process = jack::ClosureProcessHandler::new(
             move |client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
-
+                match ps_tx.try_send(()) {
+		    Ok(()) => (),
+		    Err(_) => ()
+		}
+		ps_tx.try_send(());
 		//set recording tracks
 		loop {
 		    if let Ok(track) = start_recording_rx.try_recv(){
@@ -645,6 +650,7 @@ impl JackIO {
         let active_client = client.activate_async((), process).unwrap();
 
 	let mut looper = Looper::new(
+	    ps_rx,
 	    start_playing_tx,
 	    stop_playing_tx,
 	    start_recording_tx,

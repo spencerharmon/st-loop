@@ -67,6 +67,7 @@ impl AudioSequence {
     }
 
     pub fn observe_beat(&mut self, beat: usize) {
+	//todo: beat offset
 	println!("id: {}", self.id);
 	println!("beat: {}", beat);
 	self.cycles_since_beat = 0;
@@ -125,14 +126,15 @@ impl AudioSequence {
     }
     
     pub fn process_position(&mut self,
-			    nframes: usize
+			    nframes: usize,
+			    pos_frame: usize
     ) -> Option<Vec<(f32, f32)>> {
-//	let nframes = pos_frame - self.last_frame;
 	if nframes == 0 {
 	    return None
 	}
-	if nframes > 128 {
-	    println!("trouble");
+	if pos_frame == self.last_frame {
+	    println!("yep");
+	    return None
 	}
 	if self.beat_counter == 1 {
 	    if self.playing_delay {
@@ -155,10 +157,10 @@ impl AudioSequence {
 		    ret.push((*l, *r));
 
 		} else {
-		    ret.push((0.0, 0.0));
+//		    ret.push((0.0, 0.0));
 		}
 	    } else {
-		ret.push((0.0, 0.0));
+//		ret.push((0.0, 0.0));
 	    }
 
 	    if self.playhead == 0 {
@@ -167,7 +169,7 @@ impl AudioSequence {
 	    self.playhead = self.playhead + 1;
 	}
 
-//	self.last_frame = pos_frame;
+	self.last_frame = pos_frame;
 	Some(ret)
     }
 }
