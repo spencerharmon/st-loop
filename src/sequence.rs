@@ -66,6 +66,10 @@ impl AudioSequence {
 	self.playhead = self.playhead + 1;
     }
 
+    pub fn reset_playhead(&mut self) {
+	self.playhead = 0;
+    }
+    
     pub fn observe_beat(&mut self, beat: usize) {
 	//todo: beat offset
 	println!("id: {}", self.id);
@@ -81,7 +85,7 @@ impl AudioSequence {
 	} else {
 	    if self.beat_counter == self.n_beats {
 		println!("reset playhead");
-		self.playhead = 0;
+		self.reset_playhead();
 		self.beat_counter = 1;
 	    } else {
 	     	self.beat_counter = self.beat_counter + 1;

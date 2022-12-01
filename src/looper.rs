@@ -98,11 +98,9 @@ impl Looper {
 	    pos_frame = (*pos).frame as usize;
 	}
 	let mut last_frame = pos_frame;
-
 	let mut beats_per_bar = 0;
-
 	let mut beat = 0;
-
+	let mut scene = 0;
 	let mut governor_on = true;
 	loop {
 	    
@@ -137,12 +135,32 @@ impl Looper {
 
     		}
 
+	    
 	    if self.command_manager.stop {
 		if beat_this_cycle && beat == 1 {
 		    for _ in 0..b_play_seq.len() {
-			b_play_seq.pop();
+			let idx = b_play_seq.pop().unwrap();
+			let seq = b_aud_seq.get(idx).unwrap();
+			seq.borrow_mut().reset_playhead();
 		    }
 		    self.command_manager.clear();
+		    scene = 0;
+		}
+	    }
+	    if self.command_manager.play_scene_idx != scene {
+		if beat_this_cycle && beat == 1 {
+		    //remove all current tracks and reset them
+		    for _ in 0..b_play_seq.len() {
+			let idx = b_play_seq.pop().unwrap();
+			let seq = b_aud_seq.get(idx).unwrap();
+			seq.borrow_mut().reset_playhead();
+		    }
+		    scene = self.command_manager.play_scene_idx;
+		    if let Some(scene) = b_scenes.get(scene) {
+			for s in &scene.sequences {
+			    b_play_seq.push(*s);
+			}
+		    }
 		}
 	    }
 	    
