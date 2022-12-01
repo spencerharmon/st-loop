@@ -137,6 +137,14 @@ impl Looper {
 
     		}
 
+	    if self.command_manager.stop {
+		if beat_this_cycle && beat == 1 {
+		    for _ in 0..b_play_seq.len() {
+			b_play_seq.pop();
+		    }
+		    self.command_manager.clear();
+		}
+	    }
 	    
 	    //go command
             if self.command_manager.go {

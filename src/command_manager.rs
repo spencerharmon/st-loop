@@ -99,11 +99,12 @@ impl CommandManager {
 	for _ in 0..self.rec_scenes_idx.len() {
 	    self.rec_scenes_idx.pop();
 	}
+	self.stop = false;
     }
     
     fn stop(&mut self) {
 	println!("Stop");
-	self.stop = false;
+	self.stop = true;
 	self.play_scene_idx = 0;
     }
     
