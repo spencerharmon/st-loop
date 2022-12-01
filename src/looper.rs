@@ -103,8 +103,6 @@ impl Looper {
 
 	let mut beat = 0;
 
-	//TODO: deleteme
-	let mut sequences_playing = 0;
 	let mut governor_on = true;
 	loop {
 	    
@@ -222,13 +220,6 @@ impl Looper {
 		    track_bytes.push(Vec::<(f32, f32)>::new());
 		}
 
-		if b_play_seq.len() != sequences_playing {
-		    sequences_playing = b_play_seq.len();
-		    println!(
-			"changed sequences playing number: {} <-------------------------------------",
-			sequences_playing
-		    );
-		}
 		for s in b_play_seq.iter() {
 		    let seq = b_aud_seq.get(*s).unwrap();
 
