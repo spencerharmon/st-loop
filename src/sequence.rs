@@ -54,6 +54,10 @@ impl AudioSequence {
     pub fn set_id(&mut self, id: usize) {
 	self.id = id;
     }
+    pub fn clear(&mut self) {
+	self.left.clear();
+	self.right.clear();
+    }
     pub fn process_record(&mut self, sample_pair: (f32, f32)) {
 	if !self.recording || self.recording_delay {
 	    return

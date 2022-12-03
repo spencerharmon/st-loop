@@ -81,6 +81,7 @@ impl Looper {
     pub async fn start(mut self) {
 	let recording_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
 	let playing_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
+	let newest_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
 
 	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(self.jack_client_addr);
 
@@ -106,6 +107,7 @@ impl Looper {
 	    
 	    let mut b_rec_seq = recording_sequences.borrow_mut();
 	    let mut b_play_seq = playing_sequences.borrow_mut();
+	    let mut b_newest_seqs = newest_sequences.borrow_mut();
 	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
 	    let mut b_scenes = self.scenes.borrow_mut();
 	    
@@ -135,6 +137,26 @@ impl Looper {
 
     		}
 
+	    if self.command_manager.undo {
+		//clear recording vec
+		b_rec_seq.clear();
+
+		for seq_id in b_newest_seqs.iter() {
+
+		    //remove data from sequences
+		    let seq = b_aud_seq.get(*seq_id).unwrap();
+		    seq.borrow_mut().clear();
+
+		    //remove sequences from scenes
+		    for sn in b_scenes.iter_mut() {
+			sn.remove_sequence(*seq_id);
+		    }
+		    //remove from playing
+		    println!("undo seq {}", *seq_id);
+		    b_play_seq.drain_filter(|x| *x == *seq_id);
+		}
+		b_newest_seqs.clear();
+	    }
 	    if self.command_manager.stop {
 		//stop occurs immediately
 		for _ in 0..b_play_seq.len() {
@@ -194,6 +216,7 @@ impl Looper {
 		}
 
 		//create new sequences
+		let mut once = true;
 		for t_idx in self.command_manager.rec_tracks_idx.iter() {
 		    self.start_recording.try_send(*t_idx);
 		    let mut new_seq = AudioSequence::new(*t_idx, beats_per_bar, last_frame);
@@ -205,6 +228,11 @@ impl Looper {
 			let mut scene = b_scenes.get_mut(*s_idx).unwrap();
 			scene.add_sequence(seq_idx);
 		    }
+		    if once {
+			b_newest_seqs.clear();
+			once = false;
+		    }
+		    b_newest_seqs.push(seq_idx);
 		}
 		self.command_manager.clear();
             }

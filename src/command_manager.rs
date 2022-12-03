@@ -11,6 +11,7 @@ pub struct CommandManager {
     pub rec_scenes_idx: Vec<usize>,
     pub play_scene_idx: usize,
     pub go: bool,
+    pub undo: bool,
     pub stop: bool
 }
 impl CommandManager {
@@ -19,7 +20,7 @@ impl CommandManager {
 	let rec_scenes_idx = Vec::new();
 	let play_scene_idx = 0;
 	
-	CommandManager { rec_tracks_idx, rec_scenes_idx, play_scene_idx, go: false, stop: false }
+	CommandManager { rec_tracks_idx, rec_scenes_idx, play_scene_idx, go: false, undo: false, stop: false }
     }
     
     pub fn process_midi(&mut self, om: OwnedMidi){
@@ -65,23 +66,23 @@ impl CommandManager {
 		self.track(6);
 	    } else if m == midi_control::track7() {
 		self.track(7);
-	    } else if m == midi_control::track8() {
-		self.track(8);
-	    } else if m == midi_control::track9() {
-		self.track(9);
-	    } else if m == midi_control::track10() {
-		self.track(10);
-	    } else if m == midi_control::track11() {
-		self.track(11);
-	    } else if m == midi_control::track12() {
-		self.track(12);
-	    } else if m == midi_control::track13() {
-		self.track(13);
-	    } else if m == midi_control::track14() {
-		self.track(14);
-	    } else if m == midi_control::track15() {
-		self.track(15);
-	    } 
+	    } // else if m == midi_control::track8() {
+	    // 	self.track(8);
+	    // } else if m == midi_control::track9() {
+	    // 	self.track(9);
+	    // } else if m == midi_control::track10() {
+	    // 	self.track(10);
+	    // } else if m == midi_control::track11() {
+	    // 	self.track(11);
+	    // } else if m == midi_control::track12() {
+	    // 	self.track(12);
+	    // } else if m == midi_control::track13() {
+	    // 	self.track(13);
+	    // } else if m == midi_control::track14() {
+	    // 	self.track(14);
+	    // } else if m == midi_control::track15() {
+	    // 	self.track(15);
+	    // } 
 	    println!("{:?}", self);
 	}
     }
@@ -100,6 +101,7 @@ impl CommandManager {
 	    self.rec_scenes_idx.pop();
 	}
 	self.stop = false;
+	self.undo = false;
     }
     
     fn stop(&mut self) {
@@ -110,6 +112,7 @@ impl CommandManager {
     
     fn undo(&mut self) {
 	println!("Undo");
+	self.undo = true;
     }
     
     fn track(&mut self, n: usize){

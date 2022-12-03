@@ -1,4 +1,4 @@
-#![feature(cell_leak,strict_provenance)]
+#![feature(cell_leak,strict_provenance,drain_filter)]
 
 mod jackio;
 mod looper;

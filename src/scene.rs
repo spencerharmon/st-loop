@@ -13,4 +13,7 @@ impl Scene{
 	self.sequences.push(s);
 	println!("sequence added. new length: {:?}", self.sequences.len());
     }
+    pub fn remove_sequence(&mut self, seq: usize) {
+	self.sequences.drain_filter(|x| *x == seq);
+    }
 }
