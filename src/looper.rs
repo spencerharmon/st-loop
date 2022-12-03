@@ -135,19 +135,19 @@ impl Looper {
 
     		}
 
-	    
 	    if self.command_manager.stop {
-		if beat_this_cycle && beat == 1 {
-		    for _ in 0..b_play_seq.len() {
-			let idx = b_play_seq.pop().unwrap();
-			let seq = b_aud_seq.get(idx).unwrap();
-			seq.borrow_mut().reset_playhead();
-		    }
-		    self.command_manager.clear();
-		    scene = 0;
+		//stop occurs immediately
+		for _ in 0..b_play_seq.len() {
+		    let idx = b_play_seq.pop().unwrap();
+		    let seq = b_aud_seq.get(idx).unwrap();
+		    seq.borrow_mut().reset_playhead();
 		}
+		self.command_manager.clear();
+		scene = 0;
 	    }
+
 	    if self.command_manager.play_scene_idx != scene {
+		//play scene occurs at start of next bar
 		if beat_this_cycle && beat == 1 {
 		    //remove all current tracks and reset them
 		    for _ in 0..b_play_seq.len() {
