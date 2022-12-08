@@ -36,7 +36,7 @@ impl JackIO {
 	let midi_rx_channels = Vec::new();
 	
         let (client, _status) =
-            jack::Client::new("st-loop", jack::ClientOptions::NO_START_SERVER).unwrap();
+            jack::Client::new(CLIENT_NAME, jack::ClientOptions::NO_START_SERVER).unwrap();
 	
 	//audio channels
 	let audio_channel_count = 8;

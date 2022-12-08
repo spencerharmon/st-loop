@@ -8,6 +8,7 @@ mod track;
 mod sequence;
 mod midi_control;
 mod constants;
+mod nsm;
 
 use tokio;
 

@@ -4,6 +4,7 @@ use crate::scene::Scene;
 use crate::track::*;
 use crate::constants::*;
 use crate::sequence::*;
+use crate::nsm;
 use st_lib::owned_midi::*;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -59,6 +60,9 @@ impl Looper {
 
 	//st-sync client
 	let sync = st_sync::client::Client::new();
+
+	//nsm client
+	let nsm = nsm::Client::new();
 	
 	Looper {
 	    ps_rx,
@@ -101,7 +105,7 @@ impl Looper {
 	let mut last_frame = pos_frame;
 	let mut beats_per_bar = 0;
 	let mut beat = 0;
-	let mut scene = 0;
+	let mut scene = 1;
 	let mut governor_on = true;
 	loop {
 	    
@@ -189,12 +193,16 @@ impl Looper {
 	    //go command
             if self.command_manager.go {
                 for i in 0..b_rec_seq.len() {
-		    //go command stops recording before bar boundary.
 		    let s = b_rec_seq.get(i).unwrap();
 		    let mut seq = b_aud_seq.get(*s).unwrap().borrow_mut();
-		    // always autoplay new sequences
-		    seq.start_playing(pos_frame);
-		    b_play_seq.push(*s);
+		    let cur_scene = b_scenes.get(scene).unwrap();
+
+
+		    // autoplay if sequence in cur scene
+		    if cur_scene.sequences.contains(s){
+			seq.start_playing(pos_frame);
+			b_play_seq.push(*s);
+		    }
 
 		    // stop record after start play
 		    if seq.recording {
