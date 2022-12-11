@@ -10,7 +10,9 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use jack::jack_sys as j;
 use std::mem::MaybeUninit;
-
+use std::collections::BTreeMap;
+use std::fs::{File, create_dir};
+use std::io::prelude::*;
 
 pub struct Looper {
     ps_rx: Receiver<()>,
@@ -27,7 +29,9 @@ pub struct Looper {
     command_manager: CommandManager,
     scenes: Rc<RefCell<Vec<Scene>>>,
     audio_sequences: Rc<RefCell<Vec<RefCell<AudioSequence>>>>,
-    sync: st_sync::client::Client
+    sync: st_sync::client::Client,
+    nsm: nsm::Client
+	
 }
 
 impl Looper {
@@ -79,7 +83,8 @@ impl Looper {
 	    command_manager,
 	    scenes,
 	    audio_sequences,
-	    sync
+	    sync,
+	    nsm
 	}
     }
     pub async fn start(mut self) {
@@ -107,6 +112,7 @@ impl Looper {
 	let mut beat = 0;
 	let mut scene = 1;
 	let mut governor_on = true;
+	let mut path: String = "~/.config/st-tools/st-loop/".to_string(); 
 	loop {
 	    
 	    let mut b_rec_seq = recording_sequences.borrow_mut();
@@ -115,6 +121,21 @@ impl Looper {
 	    let mut b_aud_seq = self.audio_sequences.borrow_mut();
 	    let mut b_scenes = self.scenes.borrow_mut();
 	    
+	    if let Ok(p) = (&self).nsm.try_recv_open() {
+		println!("{}", p);
+		path = p;
+	    }
+	    if let Ok(_) = (&self).nsm.try_recv_save() {
+		let mut seq_map = BTreeMap::new();
+		for seq in b_aud_seq.iter() {
+		    let b_seq =seq.borrow_mut();
+		    b_seq.save(&path);
+		    
+		    seq_map.insert(b_seq.id, (*b_seq).filename.to_string());
+		}
+		
+		self.save(b_scenes.to_vec(), seq_map, &path);
+	    }
 	    
 	    unsafe {
 		j::jack_transport_query(client_pointer, pos);
@@ -345,5 +366,19 @@ impl Looper {
 		return frame as usize
 	    }
 	}
+    }
+    fn save(&self, scenes: Vec<Scene>, seq_map: BTreeMap<usize, String>, path: &String) {
+	let mut scene_map = BTreeMap::new();
+	for i in 0..scenes.len() {
+	    scene_map.insert(i, &scenes[i].sequences);
+	}
+	
+	println!("looper save {}", path);
+	create_dir(path);
+	let mut sequences = File::create(format!("{}/sequences.yaml", path)).unwrap();
+	let mut scenes = File::create(format!("{}/scenes.yaml", path)).unwrap();
+
+	sequences.write_all(serde_yaml::to_string(&seq_map).unwrap().as_bytes());
+	scenes.write_all(serde_yaml::to_string(&scene_map).unwrap().as_bytes());
     }
 }

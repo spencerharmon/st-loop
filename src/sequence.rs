@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 pub enum Sequence {
     AudioSequence,
 }
@@ -17,7 +19,7 @@ pub struct AudioSequence {
     pub playing_delay: bool,
     pub recording: bool,
     pub id: usize,
-	
+    pub filename: String
 }
 
 impl AudioSequence {
@@ -33,6 +35,8 @@ impl AudioSequence {
 	let playing_delay = true;
 	let recording = true;
 	let id = 0;
+	let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+	let filename = format!("{:?}-{:?}.wav", track, epoch);
 	
 	AudioSequence { track,
 			beats_per_bar,
@@ -47,7 +51,8 @@ impl AudioSequence {
 			recording_delay,
 			playing_delay,
 			recording,
-			id
+			id,
+			filename
 	}
     }
 
@@ -179,6 +184,9 @@ impl AudioSequence {
 
 	self.last_frame = pos_frame;
 	Some(ret)
+    }
+    pub fn save(&self, path: &String) {
+	println!("sequence save {}", path);
     }
 }
 
