@@ -234,6 +234,10 @@ impl Looper {
 			
 			//tell jackio to stop sending on this track
 			self.stop_recording.try_send(seq.track);
+			if seq.n_beats == 0 {
+			    println!("Warning: beat length is 0. running undo command.");
+			    self.command_manager.undo();
+			}
 		    }
 		    
 

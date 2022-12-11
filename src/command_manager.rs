@@ -110,7 +110,7 @@ impl CommandManager {
 	self.play_scene_idx = 0;
     }
     
-    fn undo(&mut self) {
+    pub fn undo(&mut self) {
 	println!("Undo");
 	self.undo = true;
     }
