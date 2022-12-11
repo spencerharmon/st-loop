@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub enum Sequence {
@@ -19,11 +20,12 @@ pub struct AudioSequence {
     pub playing_delay: bool,
     pub recording: bool,
     pub id: usize,
-    pub filename: String
+    pub filename: String,
+    framerate: usize
 }
 
 impl AudioSequence {
-    pub fn new(track: usize, beats_per_bar: usize, last_frame: usize) -> AudioSequence {
+    pub fn new(track: usize, beats_per_bar: usize, last_frame: usize, framerate: usize) -> AudioSequence {
 	let length = 0;
 	let left = Vec::new();
 	let right = Vec::new();
@@ -52,7 +54,8 @@ impl AudioSequence {
 			playing_delay,
 			recording,
 			id,
-			filename
+			filename,
+			framerate
 	}
     }
 
@@ -187,6 +190,47 @@ impl AudioSequence {
     }
     pub fn save(&self, path: &String) {
 	println!("sequence save {}", path);
+	let full_path = format!("{}/{}", path, self.filename);
+	if let Ok(_) = File::open(&full_path) {
+	    println!("cowardly refusing to overwrite file");
+	    return
+	}
+	let mut file = File::create(&full_path).unwrap();
+	let header = wav::Header::new(
+	    wav::header::WAV_FORMAT_IEEE_FLOAT,
+	    2,
+	    self.framerate.try_into().unwrap(),
+	    32
+	);
+
+	wav::write(
+
+	    header,
+	    &wav::BitDepth::from(interleave(&self.left, &self.right)),
+	    &mut file
+	);
     }
 }
 
+fn interleave(l: &Vec<f32>, r: &Vec<f32>) -> Vec<f32> {
+    let mut ret = Vec::new();
+    for i in 0..l.len() {
+	ret.push(l[i]);
+	ret.push(r[i]);
+    }
+    ret
+}
+
+fn deinterleave(v: Vec<f32>) -> (Vec<f32>, Vec<f32>) {
+    let mut l = Vec::new();
+    let mut r = Vec::new();
+    
+    for i in 0..v.len() {
+	if i % 2 == 0 {
+	    l.push(v[i]);
+	} else if i % 2 == 1 {
+	    r.push(v[i]);
+	}
+    }
+    (l, r)
+}

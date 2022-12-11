@@ -103,9 +103,11 @@ impl Looper {
 
 
 	let mut pos_frame = 0;
+	let mut framerate = 48000;
 	unsafe {
 	    j::jack_transport_query(client_pointer, pos);
 	    pos_frame = (*pos).frame as usize;
+	    framerate = (*pos).frame_rate as usize;
 	}
 	let mut last_frame = pos_frame;
 	let mut beats_per_bar = 0;
@@ -126,6 +128,7 @@ impl Looper {
 		path = p;
 	    }
 	    if let Ok(_) = (&self).nsm.try_recv_save() {
+		create_dir(&path);
 		let mut seq_map = BTreeMap::new();
 		for seq in b_aud_seq.iter() {
 		    let b_seq =seq.borrow_mut();
@@ -248,7 +251,7 @@ impl Looper {
 		let mut once = true;
 		for t_idx in self.command_manager.rec_tracks_idx.iter() {
 		    self.start_recording.try_send(*t_idx);
-		    let mut new_seq = AudioSequence::new(*t_idx, beats_per_bar, last_frame);
+		    let mut new_seq = AudioSequence::new(*t_idx, beats_per_bar, last_frame, framerate);
 		    b_aud_seq.push(RefCell::new(new_seq));
 		    let seq_idx = b_aud_seq.len() - 1;
 		    b_aud_seq.get(seq_idx).unwrap().borrow_mut().set_id(seq_idx);
@@ -374,7 +377,6 @@ impl Looper {
 	}
 	
 	println!("looper save {}", path);
-	create_dir(path);
 	let mut sequences = File::create(format!("{}/sequences.yaml", path)).unwrap();
 	let mut scenes = File::create(format!("{}/scenes.yaml", path)).unwrap();
 
