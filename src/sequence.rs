@@ -111,7 +111,6 @@ impl AudioSequence {
 	if !self.recording {
 	    return
 	}
-	println!("n beats: {}", self.n_beats);
 	// 1 beat wiggle room after bar start
 	if self.n_beats % self.beats_per_bar == 0 {
 	    self.beat_counter = 1;
@@ -195,20 +194,25 @@ impl AudioSequence {
 	    println!("cowardly refusing to overwrite file");
 	    return
 	}
-	let mut file = File::create(&full_path).unwrap();
-	let header = wav::Header::new(
-	    wav::header::WAV_FORMAT_IEEE_FLOAT,
-	    2,
-	    self.framerate.try_into().unwrap(),
-	    32
-	);
 
-	wav::write(
+	let header = hound::WavSpec {
+	    channels: 2,
+	    sample_rate: self.framerate as u32,
+	    bits_per_sample: 32,
+	    sample_format: hound::SampleFormat::Float
+	};
 
-	    header,
-	    &wav::BitDepth::from(interleave(&self.left, &self.right)),
-	    &mut file
-	);
+	let mut writer = hound::WavWriter::create(full_path, header).unwrap();
+
+	for sample in interleave(&self.left, &self.right) {
+	    writer.write_sample(sample);
+	}
+
+    }
+    pub fn load(&self, file: String) {
+	
+	
+	println!("load {}", file);
     }
 }
 

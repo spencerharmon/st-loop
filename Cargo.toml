@@ -15,4 +15,5 @@ st_sync = { version = "0.1", path="../st-sync" }
 rosc = "~0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-wav = "1.0"
+hound = "3.5.0"
+rubato = "0.12.0"

@@ -126,6 +126,23 @@ impl Looper {
 	    if let Ok(p) = (&self).nsm.try_recv_open() {
 		println!("{}", p);
 		path = p;
+		let seq_yaml = format!("{}/sequences.yaml", path);
+		let scene_yaml = format!("{}/scenes.yaml", path);
+		if let Ok(seq) = File::open(seq_yaml) {
+		    if let Ok(scn) = File::open(scene_yaml) {
+			let seq_map: BTreeMap<usize, String> = serde_yaml::from_reader(seq).unwrap();
+			for (t_idx, filename) in seq_map {
+			    let new_seq = AudioSequence::new(t_idx, beats_per_bar, last_frame, framerate);
+			    new_seq.load(format!("{}/{}", path, filename));
+			    b_aud_seq[t_idx] = RefCell::new(new_seq);
+			}
+			let scene_map: BTreeMap<usize, Vec<usize>> = serde_yaml::from_reader(scn).unwrap();
+			
+			for (i, v) in scene_map {
+			    b_scenes[i] = Scene { sequences: v };
+			}
+		    }
+		}
 	    }
 	    if let Ok(_) = (&self).nsm.try_recv_save() {
 		create_dir(&path);
