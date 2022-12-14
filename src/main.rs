@@ -9,6 +9,7 @@ mod sequence;
 mod midi_control;
 mod constants;
 mod nsm;
+mod yaml_config;
 
 use tokio;
 

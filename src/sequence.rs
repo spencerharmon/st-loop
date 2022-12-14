@@ -127,11 +127,6 @@ impl AudioSequence {
 	    self.n_beats = (self.n_beats - (self.n_beats % self.beats_per_bar)) + self.beats_per_bar;
 	}
 	
-	// if self.beat_counter % self.beats_per_bar == 1 {
-	//     self.n_beats = self.n_beats - 1;
-	// } else {
-	//     self.n_beats = (self.n_beats - (self.n_beats % self.beats_per_bar)) + self.beats_per_bar;
-	// }
 	self.recording = false;
 	println!("stop recording. Beat length: {}", self.n_beats);
     }
@@ -164,19 +159,13 @@ impl AudioSequence {
 	let mut ret = Vec::new();
 
 	for i in 1..nframes + 1 {
-	    //	    println!("{}", self.playhead);
 	    if let Some(l) = self.left.get(self.playhead) {
 
 		if let Some(r) = self.right.get(self.playhead) {
-//		    println!("data {:?}", (*l, *r));
 		    ret.push((*l, *r));
 
-		} else {
-//		    ret.push((0.0, 0.0));
-		}
-	    } else {
-//		ret.push((0.0, 0.0));
-	    }
+		} 
+	    } 
 
 	    if self.playhead == 0 {
 		println!("reset playhead worked");
@@ -209,10 +198,29 @@ impl AudioSequence {
 	}
 
     }
-    pub fn load(&self, file: String) {
-	
-	
+    pub fn load(&mut self, file: String) {
 	println!("load {}", file);
+	let mut reader = hound::WavReader::open(file).unwrap();
+	if reader.spec().sample_rate as usize != self.framerate {
+	    println!("resample");
+	} else {
+	    let mut data = Vec::new();
+	    match reader.spec().sample_format {
+		hound::SampleFormat::Float => {
+		    for s in reader.samples::<f32>() {
+			data.push(s.unwrap());
+		    }
+		},
+		hound::SampleFormat::Int => {
+		    for s in reader.samples::<i32>() {
+			
+			data.push(s.unwrap() as f32);
+		    }
+		}
+	    }
+	    self.recording = false;
+	    (self.left, self.right) = deinterleave(data);
+	}
     }
 }
 

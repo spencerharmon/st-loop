@@ -5,6 +5,7 @@ use crate::track::*;
 use crate::constants::*;
 use crate::sequence::*;
 use crate::nsm;
+use crate::yaml_config::*;
 use st_lib::owned_midi::*;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -13,6 +14,7 @@ use std::mem::MaybeUninit;
 use std::collections::BTreeMap;
 use std::fs::{File, create_dir};
 use std::io::prelude::*;
+
 
 pub struct Looper {
     ps_rx: Receiver<()>,
@@ -126,35 +128,57 @@ impl Looper {
 	    if let Ok(p) = (&self).nsm.try_recv_open() {
 		println!("{}", p);
 		path = p;
-		let seq_yaml = format!("{}/sequences.yaml", path);
-		let scene_yaml = format!("{}/scenes.yaml", path);
-		if let Ok(seq) = File::open(seq_yaml) {
-		    if let Ok(scn) = File::open(scene_yaml) {
-			let seq_map: BTreeMap<usize, String> = serde_yaml::from_reader(seq).unwrap();
-			for (t_idx, filename) in seq_map {
-			    let new_seq = AudioSequence::new(t_idx, beats_per_bar, last_frame, framerate);
-			    new_seq.load(format!("{}/{}", path, filename));
-			    b_aud_seq[t_idx] = RefCell::new(new_seq);
+		let config_yaml = format!("{}/config.yaml", path);
+		if let Ok(config) = File::open(config_yaml) {
+		    let config_data: YamlConfig = serde_yaml::from_reader(config).unwrap();
+
+		    for item in config_data.sequences {
+			let mut new_seq = AudioSequence::new(item.track, beats_per_bar, last_frame, framerate);
+			new_seq.load(format!("{}/{}", path, item.filename));
+			new_seq.n_beats = item.beats;
+			new_seq.filename = item.filename;
+
+			b_aud_seq.push(RefCell::new(new_seq));
+		    }
+
+		    for (i, seq_names) in config_data.scenes {
+			let mut seq_ids = Vec::new();
+			for name in seq_names {
+			    for idx in 0..b_aud_seq.len() {
+				if b_aud_seq[idx].borrow().filename == name {
+				    seq_ids.push(idx);
+				}
+			    }
 			}
-			let scene_map: BTreeMap<usize, Vec<usize>> = serde_yaml::from_reader(scn).unwrap();
-			
-			for (i, v) in scene_map {
-			    b_scenes[i] = Scene { sequences: v };
-			}
+			b_scenes[i] = Scene { sequences: seq_ids };
 		    }
 		}
 	    }
 	    if let Ok(_) = (&self).nsm.try_recv_save() {
 		create_dir(&path);
-		let mut seq_map = BTreeMap::new();
+		let mut seq_maps = Vec::new();
 		for seq in b_aud_seq.iter() {
 		    let b_seq =seq.borrow_mut();
 		    b_seq.save(&path);
-		    
-		    seq_map.insert(b_seq.id, (*b_seq).filename.to_string());
+		    let item = SeqMeta {
+			filename: (*b_seq).filename.to_string(),
+			beats: (*b_seq).n_beats,
+			track: (*b_seq).track,
+		    };
+		    seq_maps.push(item);
+		}
+		let mut scene_map = BTreeMap::new();
+		let scenes = b_scenes.to_vec();
+		for i in 0..scenes.len() {
+		    let mut sequence_names = Vec::new();
+		    for idx in &scenes[i].sequences {
+			let s = b_aud_seq[*idx].borrow();
+			sequence_names.push(s.filename.clone());
+		    }
+		    scene_map.insert(i, sequence_names);
 		}
 		
-		self.save(b_scenes.to_vec(), seq_map, &path);
+		self.save(scene_map, seq_maps, &path);
 	    }
 	    
 	    unsafe {
@@ -391,17 +415,14 @@ impl Looper {
 	    }
 	}
     }
-    fn save(&self, scenes: Vec<Scene>, seq_map: BTreeMap<usize, String>, path: &String) {
-	let mut scene_map = BTreeMap::new();
-	for i in 0..scenes.len() {
-	    scene_map.insert(i, &scenes[i].sequences);
-	}
-	
+    fn save(&self,
+	    scene_map: BTreeMap<usize, Vec<String>>,
+	    seq_maps: Vec<SeqMeta>,
+	    path: &String) {
 	println!("looper save {}", path);
-	let mut sequences = File::create(format!("{}/sequences.yaml", path)).unwrap();
-	let mut scenes = File::create(format!("{}/scenes.yaml", path)).unwrap();
+	let mut config = File::create(format!("{}/config.yaml", path)).unwrap();
 
-	sequences.write_all(serde_yaml::to_string(&seq_map).unwrap().as_bytes());
-	scenes.write_all(serde_yaml::to_string(&scene_map).unwrap().as_bytes());
+	let out = YamlConfig { scenes: scene_map, sequences: seq_maps };
+	config.write_all(serde_yaml::to_string(&out).unwrap().as_bytes());
     }
 }
