@@ -34,7 +34,7 @@ impl AudioSequence {
 	let beat_counter = 1;
 	let n_beats = 0;
 	let recording_delay = true;
-	let playing_delay = true;
+	let playing_delay = false;
 	let recording = true;
 	let id = 0;
 	let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -80,6 +80,7 @@ impl AudioSequence {
 
     pub fn reset_playhead(&mut self) {
 	self.playhead = 0;
+	self.beat_counter = 1;
     }
     
     pub fn observe_beat(&mut self, beat: usize) {
@@ -98,7 +99,6 @@ impl AudioSequence {
 	    if self.beat_counter == self.n_beats {
 		println!("reset playhead");
 		self.reset_playhead();
-		self.beat_counter = 1;
 	    } else {
 	     	self.beat_counter = self.beat_counter + 1;
 	    }
@@ -132,7 +132,7 @@ impl AudioSequence {
     }
     pub fn start_playing(&mut self, frame: usize) {
 	self.last_frame = frame;
-	self.playing_delay = true;
+//	self.playing_delay = true;
     }
     
     pub fn process_position(&mut self,

@@ -137,6 +137,7 @@ impl Looper {
 			new_seq.load(format!("{}/{}", path, item.filename));
 			new_seq.n_beats = item.beats;
 			new_seq.filename = item.filename;
+			new_seq.reset_playhead();
 
 			b_aud_seq.push(RefCell::new(new_seq));
 		    }
@@ -230,8 +231,10 @@ impl Looper {
 		//stop occurs immediately
 		for _ in 0..b_play_seq.len() {
 		    let idx = b_play_seq.pop().unwrap();
-		    let seq = b_aud_seq.get(idx).unwrap();
-		    seq.borrow_mut().reset_playhead();
+		    let mut b_seq = b_aud_seq.get(idx).unwrap().borrow_mut();
+		    b_seq.reset_playhead();
+
+//		    self.stop_playing.try_send(b_seq.track);
 		}
 		self.command_manager.clear();
 		scene = 0;
@@ -243,13 +246,19 @@ impl Looper {
 		    //remove all current tracks and reset them
 		    for _ in 0..b_play_seq.len() {
 			let idx = b_play_seq.pop().unwrap();
-			let seq = b_aud_seq.get(idx).unwrap();
-			seq.borrow_mut().reset_playhead();
+			let mut b_seq = b_aud_seq.get(idx).unwrap().borrow_mut();
+			b_seq.reset_playhead();
+			
+//			self.stop_playing.try_send(b_seq.track);
 		    }
 		    scene = self.command_manager.play_scene_idx;
 		    if let Some(scene) = b_scenes.get(scene) {
 			for s in &scene.sequences {
 			    b_play_seq.push(*s);
+
+			    let b_seq = b_aud_seq.get(*s).unwrap().borrow_mut();
+			    
+			    self.start_playing.try_send(b_seq.track);
 			}
 		    }
 		}
@@ -267,6 +276,7 @@ impl Looper {
 		    if cur_scene.sequences.contains(s){
 			seq.start_playing(pos_frame);
 			b_play_seq.push(*s);
+			self.start_playing.try_send(seq.track);
 		    }
 
 		    // stop record after start play
@@ -280,12 +290,6 @@ impl Looper {
 			    self.command_manager.undo();
 			}
 		    }
-		    
-
-
-		    //tell jackio to start receiving output
-		    self.start_playing.try_send(seq.track);
-		    println!("play new sequences: {:?}", b_play_seq);
 		}
 
 		for _ in 0..b_rec_seq.len() {
