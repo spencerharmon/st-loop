@@ -1,5 +1,7 @@
 use std::fs::File;
 use std::time::{SystemTime, UNIX_EPOCH};
+use rubato::{FftFixedIn, Resampler};
+use std::cell::RefCell;
 
 pub enum Sequence {
     AudioSequence,
@@ -201,26 +203,113 @@ impl AudioSequence {
     pub fn load(&mut self, file: String) {
 	println!("load {}", file);
 	let mut reader = hound::WavReader::open(file).unwrap();
+
+	println!("file spec: {:?}", reader.spec());
+	let bitness = reader.spec().bits_per_sample;
+
+	let chunksize = 1024;
 	if reader.spec().sample_rate as usize != self.framerate {
+	    let mut resampler = FftFixedIn::<f64>::new(
+		reader.spec().sample_rate as usize,
+		self.framerate,
+		chunksize,
+		1024,
+		reader.spec().channels as usize
+	    ).unwrap();
+
 	    println!("resample");
+	    match reader.spec().sample_format {
+		hound::SampleFormat::Float => {
+		    println!("resample float");
+    		    let mut samples = reader.samples::<f32>();
+		    let chunk = RefCell::new(Vec::new());
+		    let mut done = false;
+		    loop {
+			for i in 0..chunksize*2 {
+			    if let Some(s) = samples.next() {
+				chunk.borrow_mut().push(s.unwrap());
+			    } else {
+				chunk.borrow_mut().push(0.0);
+				done = true;
+			    }
+			}
+			let (chunk_l, chunk_r) = deinterleave(chunk.borrow_mut().to_vec());
+			let dblvec = vec![vec_f32_to_f64(chunk_l), vec_f32_to_f64(chunk_r)];
+			let out = resampler.process(&dblvec, None).unwrap();
+			if let Some(l_chunk) = out.get(0) {
+			    for s in l_chunk {
+				self.left.push(*s as f32);
+			    }
+			}
+			if let Some(r_chunk) = out.get(1) {
+			    for s in r_chunk {
+				self.right.push(*s as f32);
+			    }
+			}
+			chunk.borrow_mut().clear();
+			if done {
+			    break
+			}
+		    }
+		    
+		},
+		hound::SampleFormat::Int => {
+		    println!("resample int");
+    		    let mut samples = reader.samples::<i32>();
+		    let mut chunk = RefCell::new(Vec::new());
+		    let mut done = false;
+		    loop {
+			for i in 0..chunksize*2 {
+			    if let Some(s) = samples.next() {
+				let sample = (s.unwrap() as f32) / 2.0_f32.powf(bitness.into());
+				chunk.borrow_mut().push(sample);
+			    } else {
+				chunk.borrow_mut().push(0.0);
+				done = true;
+			    }
+			}
+			let (chunk_l, chunk_r) = deinterleave(chunk.borrow_mut().to_vec());
+			let dblvec = vec![vec_f32_to_f64(chunk_l), vec_f32_to_f64(chunk_r)];
+			let out = resampler.process(&dblvec, None).unwrap();
+			if let Some(l_chunk) = out.get(0) {
+			    for s in l_chunk {
+				self.left.push(*s as f32);
+			    }
+			}
+			if let Some(r_chunk) = out.get(1) {
+			    for s in r_chunk {
+				self.right.push(*s as f32);
+			    }
+			}
+			chunk.borrow_mut().clear();
+			if done {
+			    break
+			}
+		    }
+		}
+	    }
 	} else {
+	    println!("sample load native sample rate");
 	    let mut data = Vec::new();
 	    match reader.spec().sample_format {
 		hound::SampleFormat::Float => {
 		    for s in reader.samples::<f32>() {
-			data.push(s.unwrap());
+			let sample = s.unwrap();
+//			println!("{:?}", sample);
+			data.push(sample);
 		    }
 		},
 		hound::SampleFormat::Int => {
 		    for s in reader.samples::<i32>() {
-			
-			data.push(s.unwrap() as f32);
+			let sample = (s.unwrap() as f32) / 2.0_f32.powf(bitness.into());
+//			println!("{:?}", sample);
+			data.push(sample);
 		    }
 		}
 	    }
-	    self.recording = false;
 	    (self.left, self.right) = deinterleave(data);
 	}
+	self.recording = false;
     }
 }
 
@@ -229,6 +318,14 @@ fn interleave(l: &Vec<f32>, r: &Vec<f32>) -> Vec<f32> {
     for i in 0..l.len() {
 	ret.push(l[i]);
 	ret.push(r[i]);
+    }
+    ret
+}
+
+fn vec_f32_to_f64(v: Vec<f32>) -> Vec<f64> {
+    let mut ret = Vec::new();
+    for s in v {
+	ret.push(s as f64);
     }
     ret
 }

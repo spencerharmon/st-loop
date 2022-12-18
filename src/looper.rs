@@ -138,6 +138,7 @@ impl Looper {
 			new_seq.n_beats = item.beats;
 			new_seq.filename = item.filename;
 			new_seq.reset_playhead();
+			
 
 			b_aud_seq.push(RefCell::new(new_seq));
 		    }
