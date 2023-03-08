@@ -83,12 +83,15 @@ impl AudioSequence {
     pub fn reset_playhead(&mut self) {
 	self.playhead = 0;
 	self.beat_counter = 1;
+	self.playing_delay = false;
     }
     
     pub fn observe_beat(&mut self, beat: usize) {
 	//todo: beat offset
 	println!("id: {}", self.id);
 	println!("beat: {}", beat);
+        println!("playhead: {}", self.playhead);
+        println!("beat counter: {}", self.beat_counter);
 	self.cycles_since_beat = 0;
 	if self.recording {
 	    if !self.recording_delay {
@@ -104,8 +107,6 @@ impl AudioSequence {
 	    } else {
 	     	self.beat_counter = self.beat_counter + 1;
 	    }
-	    println!("playhead: {}", self.playhead);
-	    println!("beat counter: {}", self.beat_counter);
 	}
     }
 
@@ -134,7 +135,7 @@ impl AudioSequence {
     }
     pub fn start_playing(&mut self, frame: usize) {
 	self.last_frame = frame;
-//	self.playing_delay = true;
+	self.playing_delay = true;
     }
     
     pub fn process_position(&mut self,
@@ -145,15 +146,15 @@ impl AudioSequence {
 	    return None
 	}
 	if pos_frame == self.last_frame {
-	    println!("yep");
+//	    println!("yep");
 	    return None
 	}
-	if self.beat_counter == 1 {
-	    if self.playing_delay {
-		println!("playing delay off-----------------");
-		self.playing_delay = false;
-	    }
-	}
+//	if self.beat_counter == self.n_beats {
+//	    if self.playing_delay {
+//		println!("playing delay off-----------------");
+//		self.playing_delay = false;
+//	    }
+//	}
 	if self.playing_delay {
 	    return None
 	}
