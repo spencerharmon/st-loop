@@ -72,58 +72,62 @@ impl CommandManager {
 	    // 	self.track(9);
 	    // } else if m == midi_control::track10() {
 	    // 	self.track(10);
-	    // } else if m == midi_control::track11() {
-	    // 	self.track(11);
-	    // } else if m == midi_control::track12() {
-	    // 	self.track(12);
-	    // } else if m == midi_control::track13() {
-	    // 	self.track(13);
-	    // } else if m == midi_control::track14() {
-	    // 	self.track(14);
-	    // } else if m == midi_control::track15() {
-	    // 	self.track(15);
-	    // } 
-	    println!("{:?}", self);
-	}
+            // } else if m == midi_control::track11() {
+            //  self.track(11);
+            // } else if m == midi_control::track12() {
+            //  self.track(12);
+            // } else if m == midi_control::track13() {
+            //  self.track(13);
+            // } else if m == midi_control::track14() {
+            //  self.track(14);
+            // } else if m == midi_control::track15() {
+            //  self.track(15);
+            // } 
+            println!("{:?}", self);
+        }
     }
 
     fn go(&mut self) {
-	println!("Go");
-	self.go = true;
+        println!("Go");
+        self.go = true;
     }
     pub fn clear(&mut self) {
-	println!("Clear");
-	self.go = false;
-	for _ in 0..self.rec_tracks_idx.len() {
-	    self.rec_tracks_idx.pop();
-	}
-	for _ in 0..self.rec_scenes_idx.len() {
-	    self.rec_scenes_idx.pop();
-	}
-	self.stop = false;
-	self.undo = false;
+        println!("Clear");
+        self.go = false;
+        for _ in 0..self.rec_tracks_idx.len() {
+            self.rec_tracks_idx.pop();
+        }
+        for _ in 0..self.rec_scenes_idx.len() {
+            self.rec_scenes_idx.pop();
+        }
+        self.stop = false;
+        self.undo = false;
     }
     
     fn stop(&mut self) {
-	println!("Stop");
-	self.stop = true;
-	self.play_scene_idx = 0;
+        println!("Stop");
+        self.stop = true;
+        self.play_scene_idx = 0;
     }
     
     pub fn undo(&mut self) {
-	println!("Undo");
-	self.undo = true;
+        println!("Undo");
+        self.undo = true;
     }
     
     fn track(&mut self, n: usize){
-	self.rec_tracks_idx.push(n);
+        if !self.rec_tracks_idx.contains(&n){
+            self.rec_tracks_idx.push(n);
+	}
     }
     
     fn scene(&mut self, n: usize){
 	if self.rec_tracks_idx.len() == 0 {
 	    self.play_scene_idx = n;
 	} else {
-	    self.rec_scenes_idx.push(n);
+	    if !self.rec_scenes_idx.contains(&n){
+		self.rec_scenes_idx.push(n);
+	    }
 	}
     }
 }
