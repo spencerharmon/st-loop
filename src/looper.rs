@@ -14,6 +14,7 @@ use std::mem::MaybeUninit;
 use std::collections::BTreeMap;
 use std::fs::{File, create_dir};
 use std::io::prelude::*;
+use std::{thread, time};
 
 
 pub struct Looper {
@@ -194,7 +195,7 @@ impl Looper {
 
 	    if pos_frame >= next_beat_frame {
 //		println!("checking");
-		if let Ok(frame) = (&self).sync.recv_next_beat_frame() {
+		if let Ok(frame) = (&self).sync.try_recv_next_beat_frame() {
 		    next_beat_frame = frame as usize;
 //		    println!("next beat frame: {}", next_beat_frame);
 //		    println!("pos frame: {}", pos_frame);
@@ -350,6 +351,9 @@ impl Looper {
 	    if let Ok(()) = self.ps_rx.try_recv(){
 		governor_on = false;
 	    }
+	    else {
+		thread::sleep(time::Duration::from_millis(1));
+	    }
 	    if !governor_on || beat_this_cycle {
 		let mut track_bytes = Vec::new();
 		for _ in 0..AUDIO_TRACK_COUNT {
@@ -415,7 +419,7 @@ impl Looper {
     }//fn start
     fn get_first_beat_frame(&self) -> usize {
 	loop {
-	    if let Ok(frame) = self.sync.recv_next_beat_frame() {
+	    if let Ok(frame) = self.sync.try_recv_next_beat_frame() {
 		return frame as usize
 	    }
 	}
