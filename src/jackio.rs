@@ -49,65 +49,20 @@ impl JackIO {
 	let mut audio_in_jack_ports = Vec::new();
 //	let mut audio_out_jack_ports = Vec::new();
 
-	//jack input ports
-	let mut in_0_l = client
-	    .register_port("in_0_l", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_0_r = client
-	    .register_port("in_0_r", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_1_l = client
-	    .register_port("in_1_l", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_1_r = client
-	    .register_port("in_1_r", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_2_l = client
-	    .register_port("in_2_l", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_2_r = client
-	    .register_port("in_2_r", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_3_l = client
-	    .register_port("in_3_l", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_3_r = client
-	    .register_port("in_3_r", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_4_l = client
-	    .register_port("in_4_l", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_4_r = client
-	    .register_port("in_4_r", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_5_l = client
-	    .register_port("in_5_l", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_5_r = client
-	    .register_port("in_5_r", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_6_l = client
-	    .register_port("in_6_l", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_6_r = client
-	    .register_port("in_6_r", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_7_l = client
-	    .register_port("in_7_l", jack::AudioIn::default())
-	    .unwrap();
-	let mut in_7_r = client
-	    .register_port("in_7_r", jack::AudioIn::default())
-	    .unwrap();
 
-	audio_in_jack_ports.push((in_0_l, in_0_r));
-	audio_in_jack_ports.push((in_1_l, in_1_r));
-	audio_in_jack_ports.push((in_2_l, in_2_r));
-	audio_in_jack_ports.push((in_3_l, in_3_r));
-	audio_in_jack_ports.push((in_4_l, in_4_r));
-	audio_in_jack_ports.push((in_5_l, in_5_r));
-	audio_in_jack_ports.push((in_6_l, in_6_r));
-	audio_in_jack_ports.push((in_7_l, in_7_r));
-
+	let ref_audio_in_ports = RefCell::new(audio_in_jack_ports);
+	for i in 0..AUDIO_TRACK_COUNT {
+	    let mut b_audio_in_ports = ref_audio_in_ports.borrow_mut();
+	    let mut b_audio_out_ports = ref_audio_in_ports.borrow_mut();
+	    let mut in_l = client
+		.register_port(format!("in_{i}_l").as_str(), jack::AudioIn::default())
+		.unwrap();
+	    let mut in_r = client
+		.register_port(format!("in_{i}_r").as_str(), jack::AudioIn::default())
+		.unwrap();
+	    b_audio_in_ports.push((in_l, in_r));
+	}
+	
 	//jack output ports
 	let mut out_0_l = client
 	    .register_port("out_0_l", jack::AudioOut::default())
@@ -255,6 +210,9 @@ impl JackIO {
 	}
 	let process = jack::ClosureProcessHandler::new(
             move |client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
+
+		let mut b_audio_in_ports = ref_audio_in_ports.borrow_mut();
+		
                 match ps_tx.try_send(()) {
 		    Ok(()) => (),
 		    Err(_) => ()
@@ -316,7 +274,7 @@ impl JackIO {
 			}
 		    }
 		    // jack input; split tuple
-                    let (jack_l, jack_r) = audio_in_jack_ports.get(t).unwrap();
+                    let (jack_l, jack_r) = b_audio_in_ports.get(t).unwrap();
 		    
                     let mut in_l = jack_l.as_slice(ps);
                     let mut in_r = jack_r.as_slice(ps);

@@ -60,7 +60,6 @@ impl Dispatcher {
 
 	//make scenes
 	let scene_count = 8;
-//	let mut c = Vec::new();
 	let scenes = Rc::new(RefCell::new(Vec::new()));
 	// plus 1 because the 0th scene is special empty scene
 	for i in 0..scene_count + 1 {
@@ -79,9 +78,7 @@ impl Dispatcher {
 
 	let mut tick_fanout = TickFanoutCommander::new(ps_rx);
 	let mut track_combiners = Vec::new();
-//	let out_vec_ref = RefCell::new(audio_out_vec);
 	for i in 0..AUDIO_TRACK_COUNT {
-//	    let b_out_vec_ref = out_vec_ref.borrow();
 	    let (tick_tx, tick_rx) = mpsc::channel(1);
 	    tick_fanout = tick_fanout.send_command(TickFanoutCommand::NewRecipient{ sender: tick_tx });
 	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), tick_rx);
@@ -89,7 +86,6 @@ impl Dispatcher {
 	}
 	
 	Dispatcher {
-//	    ps_rx,
 	    start_playing,
 	    stop_playing,
 	    start_recording,
@@ -97,7 +93,6 @@ impl Dispatcher {
 	    command_rx, 
             audio_in_vec,
             midi_in_vec, 
-//            audio_out_vec, 
             midi_out_vec,
 	    jack_client_addr,
 	    command_manager,
