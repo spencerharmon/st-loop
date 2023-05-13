@@ -54,9 +54,19 @@ impl JackIO {
 
 	let ref_audio_in_ports = RefCell::new(audio_in_jack_ports);
 	let ref_audio_out_ports = RefCell::new(audio_out_jack_ports);
+	let ref_audio_in_rx_channels = RefCell::new(audio_in_rx_channels);
+	let ref_audio_in_tx_channels = RefCell::new(audio_in_tx_channels);
+	let ref_audio_out_rx_channels = RefCell::new(audio_out_rx_channels);
+	let ref_audio_out_tx_channels = RefCell::new(audio_out_tx_channels);
 	for i in 0..AUDIO_TRACK_COUNT {
 	    let mut b_audio_in_ports = ref_audio_in_ports.borrow_mut();
 	    let mut b_audio_out_ports = ref_audio_out_ports.borrow_mut();
+	    let mut b_audio_in_rx_channels = ref_audio_in_rx_channels.borrow_mut();
+	    let mut b_audio_in_tx_channels = ref_audio_in_tx_channels.borrow_mut();
+	    let mut b_audio_out_rx_channels = ref_audio_out_rx_channels.borrow_mut();
+	    let mut b_audio_out_tx_channels = ref_audio_out_tx_channels.borrow_mut();
+
+	    //jack input ports
 	    let mut in_l = client
 		.register_port(format!("in_{i}_l").as_str(), jack::AudioIn::default())
 		.unwrap();
@@ -68,93 +78,24 @@ impl JackIO {
 	    //jack output ports
 	    let mut out_l = client
 		.register_port(format!("out_{i}_l").as_str(), jack::AudioOut::default())
-	    .unwrap();
+		.unwrap();
 	    let mut out_r = client
 		.register_port(format!("out_{i}_r").as_str(), jack::AudioOut::default())
 		.unwrap();
 	    b_audio_out_ports.push((out_l, out_r));
+
+	    //channels
+	    let (out_l_tx, out_l_rx) = unbounded();
+	    let (out_r_tx, out_r_rx) = unbounded();
+	    let (in_tx, in_rx) = unbounded();
+	
+	    b_audio_out_rx_channels.push((out_l_rx, out_r_rx));
+	    b_audio_out_tx_channels.push((out_l_tx, out_r_tx));
+	    b_audio_in_rx_channels.push(in_rx);
+	    b_audio_in_tx_channels.push(in_tx);
+
 	}
-
-	//channel 0
-	let (out_l_tx_0, out_l_rx_0) = unbounded();
-	let (out_r_tx_0, out_r_rx_0) = unbounded();
-	let (in_tx_0, in_rx_0) = unbounded();
 	
-	audio_out_rx_channels.push((&out_l_rx_0, &out_r_rx_0));
-	audio_out_tx_channels.push((out_l_tx_0, out_r_tx_0));
-	audio_in_rx_channels.push(in_rx_0);
-	audio_in_tx_channels.push(in_tx_0);
-	
-	//channel 1
-	let (out_l_tx_1, out_l_rx_1) = unbounded();
-	let (out_r_tx_1, out_r_rx_1) = unbounded();
-	let (in_tx_1, in_rx_1) = unbounded();
-	
-	audio_out_rx_channels.push((&out_l_rx_1, &out_r_rx_1));
-	audio_out_tx_channels.push((out_l_tx_1, out_r_tx_1));
-	audio_in_rx_channels.push(in_rx_1);
-	audio_in_tx_channels.push(in_tx_1);
-
-	//channel 2
-	let (out_l_tx_2, out_l_rx_2) = unbounded();
-	let (out_r_tx_2, out_r_rx_2) = unbounded();
-	let (in_tx_2, in_rx_2) = unbounded();
-	
-	audio_out_rx_channels.push((&out_l_rx_2, &out_r_rx_2));
-	audio_out_tx_channels.push((out_l_tx_2, out_r_tx_2));
-	audio_in_rx_channels.push(in_rx_2);
-	audio_in_tx_channels.push(in_tx_2);
-
-	//channel 3
-	let (out_l_tx_3, out_l_rx_3) = unbounded();
-	let (out_r_tx_3, out_r_rx_3) = unbounded();
-	let (in_tx_3, in_rx_3) = unbounded();
-	
-	audio_out_rx_channels.push((&out_l_rx_3, &out_r_rx_3));
-	audio_out_tx_channels.push((out_l_tx_3, out_r_tx_3));
-	audio_in_rx_channels.push(in_rx_3);
-	audio_in_tx_channels.push(in_tx_3);
-
-	//channel 4
-	let (out_l_tx_4, out_l_rx_4) = unbounded();
-	let (out_r_tx_4, out_r_rx_4) = unbounded();
-	let (in_tx_4, in_rx_4) = unbounded();
-	
-	audio_out_rx_channels.push((&out_l_rx_4, &out_r_rx_4));
-	audio_out_tx_channels.push((out_l_tx_4, out_r_tx_4));
-	audio_in_rx_channels.push(in_rx_4);
-	audio_in_tx_channels.push(in_tx_4);
-
-	//channel 5
-	let (out_l_tx_5, out_l_rx_5) = unbounded();
-	let (out_r_tx_5, out_r_rx_5) = unbounded();
-	let (in_tx_5, in_rx_5) = unbounded();
-	
-	audio_out_rx_channels.push((&out_l_rx_5, &out_r_rx_5));
-	audio_out_tx_channels.push((out_l_tx_5, out_r_tx_5));
-	audio_in_rx_channels.push(in_rx_5);
-	audio_in_tx_channels.push(in_tx_5);
-
-	//channel 6
-	let (out_l_tx_6, out_l_rx_6) = unbounded();
-	let (out_r_tx_6, out_r_rx_6) = unbounded();
-	let (in_tx_6, in_rx_6) = unbounded();
-	
-	audio_out_rx_channels.push((&out_l_rx_6, &out_r_rx_6));
-	audio_out_tx_channels.push((out_l_tx_6, out_r_tx_6));
-	audio_in_rx_channels.push(in_rx_6);
-	audio_in_tx_channels.push(in_tx_6);
-
-	//channel 7
-	let (out_l_tx_7, out_l_rx_7) = unbounded();
-	let (out_r_tx_7, out_r_rx_7) = unbounded();
-	let (in_tx_7, in_rx_7) = unbounded();
-	
-	audio_out_rx_channels.push((&out_l_rx_7, &out_r_rx_7));
-	audio_out_tx_channels.push((out_l_tx_7, out_r_tx_7));
-	audio_in_rx_channels.push(in_rx_7);
-	audio_in_tx_channels.push(in_tx_7);
-
 	let (ps_tx, ps_rx) = mpsc::channel(1);
         let mut command_midi_port = client
             .register_port("command", jack::MidiIn::default())
@@ -174,12 +115,14 @@ impl JackIO {
 
 		let mut b_audio_in_ports = ref_audio_in_ports.borrow_mut();
 		let mut b_audio_out_ports = ref_audio_out_ports.borrow_mut();
+		let mut b_audio_out_rx_channels = ref_audio_out_rx_channels.borrow_mut();
+		let mut b_audio_in_tx_channels = ref_audio_in_tx_channels.borrow_mut();
 		
                 match ps_tx.try_send(()) {
 		    Ok(()) => (),
 		    Err(_) => ()
 		}
-		ps_tx.try_send(());
+
 		//set recording tracks
 		loop {
 		    if let Ok(track) = start_recording_rx.try_recv(){
@@ -246,7 +189,7 @@ impl JackIO {
                         // receive input from jack, send to looper via channel
                         if let Some(l_bytes) = in_l.get(i) {
                             if let Some(r_bytes) = in_r.get(i) {
-                                audio_in_tx_channels.get(t)
+                                b_audio_in_tx_channels.get(t)
                                     .unwrap()
                                     .send(
                                         (*l_bytes, *r_bytes)
@@ -258,7 +201,14 @@ impl JackIO {
 		    //play/out
 		    if let Some(b) = playing.get(t) {
 			if *b {
-			    let (ref mut out_l, ref mut out_r) = b_audio_out_ports.get_mut(t).unwrap();
+			    let (ref mut out_l, ref mut out_r) =
+				b_audio_out_ports
+				.get_mut(t)
+				.unwrap();
+			    let (ref mut out_l_rx, ref mut out_r_rx) =
+				b_audio_out_rx_channels
+				.get_mut(t)
+				.unwrap();
 
 			    let mut end = false;
 
@@ -267,8 +217,7 @@ impl JackIO {
 				if end {
 				    *v = 0.0;
 				} else {
-				    //todo this is wrong. needs to get from a vec of rx channels
-				    match out_l_rx_0.try_recv() {
+				    match out_l_rx.try_recv() {
 					Ok(float) => *v = float,
 					Err(_) => {
 					    *v = 0.0;
@@ -284,8 +233,7 @@ impl JackIO {
 				if end {
 				    *v = 0.0;
 				} else {
-				    //todo this is wrong. needs to get from a vec of rx channels
-				    match out_r_rx_0.try_recv() {
+				    match out_r_rx.try_recv() {
 					Ok(float) => *v = float,
 					Err(_) => {
 					    *v = 0.0;
@@ -303,6 +251,8 @@ impl JackIO {
         );
         let active_client = client.activate_async((), process).unwrap();
 
+	let audio_in_rx_channels = ref_audio_in_rx_channels.borrow_mut().to_vec();
+	let audio_out_tx_channels = ref_audio_out_tx_channels.borrow_mut().to_vec();
 	let mut dispatcher = Dispatcher::new(
 	    ps_rx,
 	    start_playing_tx,
