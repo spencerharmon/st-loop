@@ -117,12 +117,6 @@ impl JackIO {
 		let mut b_audio_out_rx_channels = ref_audio_out_rx_channels.borrow_mut();
 		let mut b_audio_in_tx_channels = ref_audio_in_tx_channels.borrow_mut();
 
-		/*
-                match ps_tx.try_send(()) {
-		    Ok(()) => (),
-		    Err(_) => ()
-	    }
-		 */
 		ps_tx.try_send(());
 
 		//set recording tracks
@@ -237,38 +231,6 @@ impl JackIO {
 				    }
 				}
 			    }
-			    /*
-    			    // write left output
-			    for v in out_l.as_mut_slice(ps).iter_mut(){
-				if end {
-				    *v = 0.0;
-				} else {
-				    match out_l_rx.try_recv() {
-					Ok(float) => *v = float,
-					Err(_) => {
-					    *v = 0.0;
-					    end = true;
-					}
-				    }
-				}
-			    }
-
-			    // write right output
-			    end = false;
-			    for v in out_r.as_mut_slice(ps).iter_mut(){
-				if end {
-				    *v = 0.0;
-				} else {
-				    match out_r_rx.try_recv() {
-					Ok(float) => *v = float,
-					Err(_) => {
-					    *v = 0.0;
-					    end = true;
-					}
-				    }
-				}
-			}
-			    */
 			}//if *b (playing)
 
     		    }//play/out
