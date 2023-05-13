@@ -47,13 +47,16 @@ impl JackIO {
 	let mut audio_in_tx_channels = Vec::new();
 	let mut audio_in_rx_channels = Vec::new();
 	let mut audio_in_jack_ports = Vec::new();
-//	let mut audio_out_jack_ports = Vec::new();
+	let mut audio_out_jack_ports = Vec::<(
+	    jack::Port<jack::AudioOut>,
+	    jack::Port<jack::AudioOut>)>::new();
 
 
 	let ref_audio_in_ports = RefCell::new(audio_in_jack_ports);
+	let ref_audio_out_ports = RefCell::new(audio_out_jack_ports);
 	for i in 0..AUDIO_TRACK_COUNT {
 	    let mut b_audio_in_ports = ref_audio_in_ports.borrow_mut();
-	    let mut b_audio_out_ports = ref_audio_in_ports.borrow_mut();
+	    let mut b_audio_out_ports = ref_audio_out_ports.borrow_mut();
 	    let mut in_l = client
 		.register_port(format!("in_{i}_l").as_str(), jack::AudioIn::default())
 		.unwrap();
@@ -61,58 +64,16 @@ impl JackIO {
 		.register_port(format!("in_{i}_r").as_str(), jack::AudioIn::default())
 		.unwrap();
 	    b_audio_in_ports.push((in_l, in_r));
-	}
 	
-	//jack output ports
-	let mut out_0_l = client
-	    .register_port("out_0_l", jack::AudioOut::default())
+	    //jack output ports
+	    let mut out_l = client
+		.register_port(format!("out_{i}_l").as_str(), jack::AudioOut::default())
 	    .unwrap();
-	let mut out_0_r = client
-	    .register_port("out_0_r", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_1_l = client
-	    .register_port("out_1_l", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_1_r = client
-	    .register_port("out_1_r", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_2_l = client
-	    .register_port("out_2_l", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_2_r = client
-	    .register_port("out_2_r", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_3_l = client
-	    .register_port("out_3_l", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_3_r = client
-	    .register_port("out_3_r", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_4_l = client
-	    .register_port("out_4_l", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_4_r = client
-	    .register_port("out_4_r", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_5_l = client
-	    .register_port("out_5_l", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_5_r = client
-	    .register_port("out_5_r", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_6_l = client
-	    .register_port("out_6_l", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_6_r = client
-	    .register_port("out_6_r", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_7_l = client
-	    .register_port("out_7_l", jack::AudioOut::default())
-	    .unwrap();
-	let mut out_7_r = client
-	    .register_port("out_7_r", jack::AudioOut::default())
-	    .unwrap();
-
+	    let mut out_r = client
+		.register_port(format!("out_{i}_r").as_str(), jack::AudioOut::default())
+		.unwrap();
+	    b_audio_out_ports.push((out_l, out_r));
+	}
 
 	//channel 0
 	let (out_l_tx_0, out_l_rx_0) = unbounded();
@@ -212,6 +173,7 @@ impl JackIO {
             move |client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
 
 		let mut b_audio_in_ports = ref_audio_in_ports.borrow_mut();
+		let mut b_audio_out_ports = ref_audio_out_ports.borrow_mut();
 		
                 match ps_tx.try_send(()) {
 		    Ok(()) => (),
@@ -268,6 +230,7 @@ impl JackIO {
 		}
 
 		for t in 0..AUDIO_TRACK_COUNT {
+		    //record/in
 		    if let Some(b) = recording.get(t) {
 			if *b == false {
 			    continue
@@ -291,317 +254,49 @@ impl JackIO {
                             }
                         }
                     }
-		}    
 
+		    //play/out
+		    if let Some(b) = playing.get(t) {
+			if *b {
+			    let (ref mut out_l, ref mut out_r) = b_audio_out_ports.get_mut(t).unwrap();
 
-		//channel by bloody channel
+			    let mut end = false;
 
-		//track 0
-		if let Some(b) = playing.get(0) {
-		    if *b {
-
-			let mut end = false;
-
-			// write left output
-			for v in out_0_l.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_l_rx_0.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
+			    // write left output
+			    for v in out_l.as_mut_slice(ps).iter_mut(){
+				if end {
+				    *v = 0.0;
+				} else {
+				    //todo this is wrong. needs to get from a vec of rx channels
+				    match out_l_rx_0.try_recv() {
+					Ok(float) => *v = float,
+					Err(_) => {
+					    *v = 0.0;
+					    end = true;
+					}
 				    }
 				}
 			    }
-			}
 
-			// write right output
-			end = false;
-			for v in out_0_r.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_r_rx_0.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-		    }
-		}
-
-		//track 1
-		if let Some(b) = playing.get(1) {
-		    if *b {
-
-			let mut end = false;
-
-			// write left output
-			for v in out_1_l.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_l_rx_1.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-
-			// write right output
-			end = false;
-			for v in out_1_r.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_r_rx_1.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
+			    // write right output
+			    end = false;
+			    for v in out_r.as_mut_slice(ps).iter_mut(){
+				if end {
+				    *v = 0.0;
+				} else {
+				    //todo this is wrong. needs to get from a vec of rx channels
+				    match out_r_rx_0.try_recv() {
+					Ok(float) => *v = float,
+					Err(_) => {
+					    *v = 0.0;
+					    end = true;
+					}
 				    }
 				}
 			    }
 			}
 		    }
-		}
-		
-		//track 2
-		if let Some(b) = playing.get(2) {
-		    if *b {
-
-			let mut end = false;
-
-			// write left output
-			for v in out_2_l.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_l_rx_2.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-
-			// write right output
-			end = false;
-			for v in out_2_r.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_r_rx_2.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-		    }
-		}
-		//track 3
-		if let Some(b) = playing.get(3) {
-		    if *b {
-
-			let mut end = false;
-
-			// write left output
-			for v in out_3_l.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_l_rx_3.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-
-			// write right output
-			end = false;
-			for v in out_3_r.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_r_rx_3.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-		    }
-		}
-		//track 4
-		if let Some(b) = playing.get(4) {
-		    if *b {
-
-			let mut end = false;
-
-			// write left output
-			for v in out_4_l.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_l_rx_4.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-
-			// write right output
-			end = false;
-			for v in out_4_r.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_r_rx_4.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-		    }
-		}
-		//track 5
-		if let Some(b) = playing.get(5) {
-		    if *b {
-
-			let mut end = false;
-
-			// write left output
-			for v in out_5_l.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_l_rx_5.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-
-			// write right output
-			end = false;
-			for v in out_5_r.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_r_rx_5.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-		    }
-		}
-		
-		//track 6
-		if let Some(b) = playing.get(6) {
-		    if *b {
-
-			let mut end = false;
-
-			// write left output
-			for v in out_6_l.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_l_rx_6.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-
-			// write right output
-			end = false;
-			for v in out_6_r.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_r_rx_6.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-		    }
-		}
-		//track 7
-		if let Some(b) = playing.get(7) {
-		    if *b {
-
-			let mut end = false;
-
-			// write left output
-			for v in out_7_l.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_l_rx_7.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-
-			// write right output
-			end = false;
-			for v in out_7_r.as_mut_slice(ps).iter_mut(){
-			    if end {
-				*v = 0.0;
-			    } else {
-				match out_r_rx_7.try_recv() {
-				    Ok(float) => *v = float,
-				    Err(_) => {
-					*v = 0.0;
-					end = true;
-				    }
-				}
-			    }
-			}
-		    }
+    		    
 		}
                 jack::Control::Continue
             },
