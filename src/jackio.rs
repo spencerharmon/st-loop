@@ -117,11 +117,14 @@ impl JackIO {
 		let mut b_audio_out_ports = ref_audio_out_ports.borrow_mut();
 		let mut b_audio_out_rx_channels = ref_audio_out_rx_channels.borrow_mut();
 		let mut b_audio_in_tx_channels = ref_audio_in_tx_channels.borrow_mut();
-		
+
+		/*
                 match ps_tx.try_send(()) {
 		    Ok(()) => (),
 		    Err(_) => ()
-		}
+	    }
+		 */
+		ps_tx.try_send(());
 
 		//set recording tracks
 		loop {
@@ -175,28 +178,27 @@ impl JackIO {
 		for t in 0..AUDIO_TRACK_COUNT {
 		    //record/in
 		    if let Some(b) = recording.get(t) {
-			if *b == false {
-			    continue
+			if *b {
+			    // jack input; split tuple
+			    let (jack_l, jack_r) = b_audio_in_ports.get(t).unwrap();
+		    
+			    let mut in_l = jack_l.as_slice(ps);
+			    let mut in_r = jack_r.as_slice(ps);
+
+			    for i in 0..in_l.len() {
+				// receive input from jack, send to looper via channel
+				if let Some(l_bytes) = in_l.get(i) {
+				    if let Some(r_bytes) = in_r.get(i) {
+					b_audio_in_tx_channels.get(t)
+					    .unwrap()
+					    .send(
+						(*l_bytes, *r_bytes)
+					    );
+				    }
+				}
+			    }
 			}
 		    }
-		    // jack input; split tuple
-                    let (jack_l, jack_r) = b_audio_in_ports.get(t).unwrap();
-		    
-                    let mut in_l = jack_l.as_slice(ps);
-                    let mut in_r = jack_r.as_slice(ps);
-		    
-                    for i in 0..in_l.len() {
-                        // receive input from jack, send to looper via channel
-                        if let Some(l_bytes) = in_l.get(i) {
-                            if let Some(r_bytes) = in_r.get(i) {
-                                b_audio_in_tx_channels.get(t)
-                                    .unwrap()
-                                    .send(
-                                        (*l_bytes, *r_bytes)
-                                    );
-                            }
-                        }
-                    }
 
 		    //play/out
 		    if let Some(b) = playing.get(t) {

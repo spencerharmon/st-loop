@@ -4,7 +4,18 @@ use tokio::select;
 use tokio::sync::mpsc::{Receiver, Sender, UnboundedSender};
 use std::cell::RefCell;
 use crossbeam_channel;
-use tokio::task::LocalSet;
+use tokio::sync::RwLock;
+
+	    //todo remove me
+pub fn sine_wave_generator(freq: &f32, length: usize, sample_rate: u16) -> Vec<f32> {
+    let mut ret = vec![0f32; length.into()];
+    let samples_per_period =  sample_rate / *freq as u16;
+    for i in 0..length {
+        ret[i as usize] = (2f32 * std::f32::consts::PI * i as f32 / samples_per_period as f32).sin();
+
+    }
+	ret
+}
 
 pub enum TrackAudioCommand {
     NewSeq { channel: Receiver<(f32, f32)> },
@@ -36,10 +47,10 @@ impl TrackAudioCombinerCommander {
             sequences
         };
         let t = TrackAudioCombiner::new();
-	let local = LocalSet::new();
-        local.spawn_local(async move {
+        tokio::task::spawn(async move {
 	    t.start(rx, c).await;
 	});
+
 			   
         TrackAudioCombinerCommander { tx }
     }
@@ -73,18 +84,18 @@ impl TrackAudioCombiner {
         mut command_rx: mpsc::Receiver<TrackAudioCommand>,
         channels: TrackAudioChannels
     ) {
-        let channels = RefCell::new(channels);
+        let channels_rw = RwLock::new(channels);
+        let mut channels_lock = channels_rw.write().await;
         
         loop {
-            let mut channels_ref = channels.borrow_mut();
             select! {
                 command = command_rx.recv() => {
                     if let Some(c) = command {
-                        self.process_command(&mut channels_ref, c);
+                        self.process_command(&mut channels_lock, c);
                     }
                 },
-                _ = channels_ref.jack_tick.recv() => {
-                    self.process_sequence_data(&mut channels_ref);
+                _ = channels_lock.jack_tick.recv() => {
+                    self.process_sequence_data(&mut channels_lock);
                 }
             }
         }
@@ -112,10 +123,21 @@ impl TrackAudioCombiner {
 	let mut first = true;
 	
 	let n = channels.sequences.len();
+	//todo remove me
+	let n = 1;
+	let mut wave = sine_wave_generator(&440f32, 9999, 48000);
 	let channels = RefCell::new(channels);
         for _ in 0..n {
+	    //todo remove me
+	    for _ in 0..9999 {
+		let x = wave.pop().unwrap();
+//	    dbg!(x);
+		buf.push((x, x));
+	    }
 	    let mut channels_ref = channels.borrow_mut();
-	    let mut seq = channels_ref.sequences.pop().unwrap();
+	    //todo remove if let; only for signal testing. ordinarily we can guarantee there's a seq at this point.
+	    // let mut seq = channels_ref.sequences.pop().unwrap();
+	    if let Some(mut seq) = channels_ref.sequences.pop() {
 	    if first {
 		loop {
                     if let Ok(v) = seq.try_recv() {
@@ -135,6 +157,7 @@ impl TrackAudioCombiner {
                     }
                 }
             }
+	    }
 	    for (l, r) in buf.iter() {
 		channels_ref.output.0.send(*l);
 		channels_ref.output.1.send(*r);

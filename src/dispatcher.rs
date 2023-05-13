@@ -21,7 +21,6 @@ use std::{thread, time};
 use tokio::sync::mpsc;
 use tokio::task;
 
-
 pub struct Dispatcher {
 //    ps_rx: mpsc::Receiver<()>,
     start_playing: Sender<usize>,
@@ -83,6 +82,9 @@ impl Dispatcher {
 	    tick_fanout = tick_fanout.send_command(TickFanoutCommand::NewRecipient{ sender: tick_tx });
 	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), tick_rx);
 	    track_combiners.push(t);
+
+	    //todo remove me
+	    start_playing.send(i);
 	}
 	
 	Dispatcher {
@@ -134,7 +136,7 @@ impl Dispatcher {
 
 
 	loop {
-	    thread::sleep(time::Duration::from_millis(10));
+	    tokio::time::sleep(time::Duration::from_millis(10));
 	}
     }
     fn get_first_beat_frame(&self) -> usize {
