@@ -3,13 +3,14 @@ use tokio::task;
 use crossbeam_channel::*;
 use std::mem::MaybeUninit;
 use std::{thread, time};
-use crate::looper::Looper;
+use crate::dispatcher::Dispatcher;
 use st_lib::owned_midi::*;
 use crate::scene::Scene;
 use crate::constants::*;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::cell::RefMut;
+use tokio::sync::mpsc;
 
 pub struct JackIO;
 
@@ -238,7 +239,7 @@ impl JackIO {
 	audio_in_rx_channels.push(in_rx_7);
 	audio_in_tx_channels.push(in_tx_7);
 
-	let (ps_tx, ps_rx) = bounded(1);
+	let (ps_tx, ps_rx) = mpsc::channel(1);
         let mut command_midi_port = client
             .register_port("command", jack::MidiIn::default())
             .unwrap();
@@ -326,7 +327,7 @@ impl JackIO {
                             if let Some(r_bytes) = in_r.get(i) {
                                 audio_in_tx_channels.get(t)
                                     .unwrap()
-                                    .try_send(
+                                    .send(
                                         (*l_bytes, *r_bytes)
                                     );
                             }
@@ -649,7 +650,7 @@ impl JackIO {
         );
         let active_client = client.activate_async((), process).unwrap();
 
-	let mut looper = Looper::new(
+	let mut dispatcher = Dispatcher::new(
 	    ps_rx,
 	    start_playing_tx,
 	    stop_playing_tx,
@@ -662,6 +663,6 @@ impl JackIO {
 	    midi_tx_channels,
 	    client_pointer.expose_addr()
 	);
-	looper.start().await;
+	dispatcher.start().await;
     }
 }

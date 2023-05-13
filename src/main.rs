@@ -1,7 +1,9 @@
 #![feature(cell_leak,strict_provenance,drain_filter)]
 
 mod jackio;
-mod looper;
+mod dispatcher;
+mod track_audio;
+mod tick_fanout;
 mod command_manager;
 mod scene;
 mod track;
