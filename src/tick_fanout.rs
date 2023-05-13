@@ -1,7 +1,5 @@
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::select;
-use tokio::sync::RwLock;
+use crossbeam_channel::*;
+use crossbeam;
 
 pub enum TickFanoutCommand {
     NewRecipient { sender: Sender<()> }
@@ -14,7 +12,7 @@ pub struct TickFanoutCommander {
 impl TickFanoutCommander {
     pub fn new(tick: Receiver<()>) -> TickFanoutCommander {
 	let recipients: Vec<Sender<()>> = Vec::new();
-	let (command_tx, mut command_rx) = mpsc::channel(1);
+	let (command_tx, mut command_rx) = bounded(1);
 	let mut recipients = Vec::new();
 	let channels = TickFanoutChannels {
 	    tick,
@@ -44,6 +42,7 @@ impl TickFanoutCommander {
 }
 
 
+#[derive(Debug)]
 pub struct TickFanoutChannels {
     tick: Receiver<()>,
     recipients: Vec<Sender<()>>,
@@ -65,18 +64,17 @@ impl TickFanout {
 	mut command_rx: Receiver<TickFanoutCommand>,
 	mut channels: TickFanoutChannels
     ) {
-	let channels_rw = RwLock::new(channels);
-        let mut channels_lock = channels_rw.write().await;
+//	let channels_rw = RwLock::new(channels);
+//        let mut channels_lock = channels_rw.write().await;
 	loop {
-	    select! {
-		command = command_rx.recv() => {
-		    if let Some(c) = command {
-
-			self.process_command(c, &mut channels_lock);
+	    crossbeam::select! {
+		recv(command_rx) -> command => {
+		    if let Ok(c) = command {
+			self.process_command(c, &mut channels);
 		    }
 		}
-		fanout = channels_lock.tick.recv() => {
-		    self.fanout_process(&mut channels_lock);
+		recv(channels.tick) -> _ => {
+		    self.fanout_process(&mut channels);
 		}
 	    }
 
@@ -97,7 +95,7 @@ impl TickFanout {
 
     }
 
-    async fn fanout_process(
+    fn fanout_process(
 	&self,
 	channels: &mut TickFanoutChannels
     ) {

@@ -18,11 +18,9 @@ use std::collections::BTreeMap;
 use std::fs::{File, create_dir};
 use std::io::prelude::*;
 use std::{thread, time};
-use tokio::sync::mpsc;
 use tokio::task;
 
 pub struct Dispatcher {
-//    ps_rx: mpsc::Receiver<()>,
     start_playing: Sender<usize>,
     stop_playing: Sender<usize>,
     start_recording: Sender<usize>,
@@ -30,7 +28,6 @@ pub struct Dispatcher {
     command_rx: Receiver<OwnedMidi>,
     audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
-//    audio_out_vec: Vec<(Sender<f32>, Sender<f32>)>,
     midi_out_vec: Vec<OwnedMidi>,
     jack_client_addr: usize,
     command_manager: CommandManager,
@@ -43,7 +40,7 @@ pub struct Dispatcher {
 
 impl Dispatcher {
     pub fn new (
-	ps_rx: mpsc::Receiver<()>,
+	ps_rx: Receiver<()>,
 	start_playing: Sender<usize>,
 	stop_playing: Sender<usize>,
 	start_recording: Sender<usize>,
@@ -78,7 +75,7 @@ impl Dispatcher {
 	let mut tick_fanout = TickFanoutCommander::new(ps_rx);
 	let mut track_combiners = Vec::new();
 	for i in 0..AUDIO_TRACK_COUNT {
-	    let (tick_tx, tick_rx) = mpsc::channel(1);
+	    let (tick_tx, tick_rx) = bounded(1);
 	    tick_fanout = tick_fanout.send_command(TickFanoutCommand::NewRecipient{ sender: tick_tx });
 	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), tick_rx);
 	    track_combiners.push(t);

@@ -9,8 +9,7 @@ use crate::scene::Scene;
 use crate::constants::*;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::cell::RefMut;
-use tokio::sync::mpsc;
+//use std::cell::RefMut;
 
 pub struct JackIO;
 
@@ -95,7 +94,7 @@ impl JackIO {
 
 	}
 	
-	let (ps_tx, ps_rx) = mpsc::channel(1);
+	let (ps_tx, ps_rx) = bounded(1);
         let mut command_midi_port = client
             .register_port("command", jack::MidiIn::default())
             .unwrap();

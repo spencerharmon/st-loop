@@ -1,11 +1,6 @@
-use std::collections::HashMap;
-use tokio::sync::mpsc;
-use tokio::select;
-use tokio::sync::mpsc::{Receiver, Sender, UnboundedSender};
 use std::cell::RefCell;
-use crossbeam_channel;
-use tokio::sync::RwLock;
-
+use crossbeam_channel::*;
+use crossbeam;
 	    //todo remove me
 pub fn sine_wave_generator(freq: &f32, length: usize, sample_rate: u16) -> Vec<f32> {
     let mut ret = vec![0f32; length.into()];
@@ -33,10 +28,10 @@ pub struct TrackAudioCombinerCommander {
 
 impl TrackAudioCombinerCommander {
     pub fn new(
-	output: crossbeam_channel::Sender<(f32, f32)>,
+	output: Sender<(f32, f32)>,
 	jack_tick: Receiver<()>
     ) -> TrackAudioCombinerCommander {
-        let (tx, rx) = mpsc::channel(1);
+        let (tx, rx) = bounded(1);
         let sequences = Vec::new();
         let c = TrackAudioChannels {
             jack_tick,
@@ -62,7 +57,7 @@ impl TrackAudioCombinerCommander {
 
 struct TrackAudioChannels {
     jack_tick: Receiver<()>,
-    output: crossbeam_channel::Sender<(f32, f32)>,
+    output: Sender<(f32, f32)>,
     sequences: Vec<Receiver<(f32, f32)>>
 }
 
@@ -75,21 +70,19 @@ impl TrackAudioCombiner {
 
     pub async fn start(
         mut self,
-        mut command_rx: mpsc::Receiver<TrackAudioCommand>,
-        channels: TrackAudioChannels
+        mut command_rx: Receiver<TrackAudioCommand>,
+        mut channels: TrackAudioChannels
     ) {
-        let channels_rw = RwLock::new(channels);
-        let mut channels_lock = channels_rw.write().await;
         
         loop {
-            select! {
-                command = command_rx.recv() => {
-                    if let Some(c) = command {
-                        self.process_command(&mut channels_lock, c);
+            crossbeam::select! {
+                recv(command_rx) -> command => {
+                    if let Ok(c) = command {
+                        self.process_command(&mut channels, c);
                     }
                 },
-                _ = channels_lock.jack_tick.recv() => {
-                    self.process_sequence_data(&mut channels_lock);
+                recv(channels.jack_tick) -> _ => {
+                    self.process_sequence_data(&mut channels);
                 }
             }
         }
