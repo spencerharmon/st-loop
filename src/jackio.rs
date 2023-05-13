@@ -9,7 +9,6 @@ use crate::scene::Scene;
 use crate::constants::*;
 use std::rc::Rc;
 use std::cell::RefCell;
-//use std::cell::RefMut;
 
 pub struct JackIO;
 
@@ -110,7 +109,6 @@ impl JackIO {
 	}
 	let process = jack::ClosureProcessHandler::new(
             move |client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
-
 		let mut b_audio_in_ports = ref_audio_in_ports.borrow_mut();
 		let mut b_audio_out_ports = ref_audio_out_ports.borrow_mut();
 		let mut b_audio_out_rx_channels = ref_audio_out_rx_channels.borrow_mut();
@@ -236,8 +234,9 @@ impl JackIO {
 
     		}//for t in 0..AUDIO_TRACK_COUNT
     		    
-                jack::Control::Continue
-            },//closure
+            jack::Control::Continue
+        },//closure
+
         ); //jack::ClosureProcessHandler
         let active_client = client.activate_async((), process).unwrap();
 

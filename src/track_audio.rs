@@ -1,7 +1,9 @@
 use std::cell::RefCell;
 use crossbeam_channel::*;
 use crossbeam;
-	    //todo remove me
+use std::{thread, time};
+
+//todo remove me
 pub fn sine_wave_generator(freq: &f32, length: usize, sample_rate: u16) -> Vec<f32> {
     let mut ret = vec![0f32; length.into()];
     let samples_per_period =  sample_rate / *freq as u16;
@@ -15,6 +17,8 @@ pub fn sine_wave_generator(freq: &f32, length: usize, sample_rate: u16) -> Vec<f
 pub enum TrackAudioCommand {
     NewSeq { channel: Receiver<(f32, f32)> },
     DelLastSeq,
+    Play,
+    Stop
 }
 
 struct TrackAudioData {
@@ -38,9 +42,12 @@ impl TrackAudioCombinerCommander {
             output,
             sequences
         };
+	let s = TrackAudioState {
+	    playing: false
+	};
         let t = TrackAudioCombiner::new();
         tokio::task::spawn(async move {
-	    t.start(rx, c).await;
+	    t.start(rx, c, s).await;
 	});
 
 			   
@@ -61,6 +68,10 @@ struct TrackAudioChannels {
     sequences: Vec<Receiver<(f32, f32)>>
 }
 
+struct TrackAudioState {
+    playing: bool
+}
+
 struct TrackAudioCombiner {}
 
 impl TrackAudioCombiner {
@@ -71,18 +82,23 @@ impl TrackAudioCombiner {
     pub async fn start(
         mut self,
         mut command_rx: Receiver<TrackAudioCommand>,
-        mut channels: TrackAudioChannels
+        mut channels: TrackAudioChannels,
+	mut state: TrackAudioState
     ) {
         
         loop {
             crossbeam::select! {
                 recv(command_rx) -> command => {
                     if let Ok(c) = command {
-                        self.process_command(&mut channels, c);
+                        self.process_command(&mut channels, &mut state, c);
+
+			thread::sleep(time::Duration::from_millis(10));
                     }
                 },
                 recv(channels.jack_tick) -> _ => {
-                    self.process_sequence_data(&mut channels);
+                    self.process_sequence_data(&mut channels, &mut state);
+
+		    thread::sleep(time::Duration::from_millis(1));
                 }
             }
         }
@@ -91,6 +107,7 @@ impl TrackAudioCombiner {
     fn process_command(
         &self,
         channels: &mut TrackAudioChannels,
+	state: &mut TrackAudioState,
         command: TrackAudioCommand
     ) {
         match command {
@@ -100,27 +117,37 @@ impl TrackAudioCombiner {
             TrackAudioCommand::DelLastSeq => {
                 channels.sequences.pop();
             }
+	    TrackAudioCommand::Play => {
+		state.playing = true;
+	    }
+	    TrackAudioCommand::Stop => {
+		state.playing = false;
+	    }
         }
     }
     fn process_sequence_data(
         &self,
-        channels: &mut TrackAudioChannels
+        channels: &mut TrackAudioChannels,
+	state: &mut TrackAudioState,
     ) {
+	if state.playing {
         let mut buf = Vec::new();
 	let mut first = true;
 	
 	let n = channels.sequences.len();
 	//todo remove me
-	let n = 1;
-	let mut wave = sine_wave_generator(&440f32, 9999, 48000);
+//	let n = 1;
+//	let mut wave = sine_wave_generator(&440f32, 9999, 48000);
 	let channels = RefCell::new(channels);
         for _ in 0..n {
 	    //todo remove me
+	    /*
 	    for _ in 0..9999 {
 		let x = wave.pop().unwrap();
 //	    dbg!(x);
 		buf.push((x, x));
-	    }
+	}
+	    */
 	    let mut channels_ref = channels.borrow_mut();
 	    //todo remove if let; only for signal testing. ordinarily we can guarantee there's a seq at this point.
 	    // let mut seq = channels_ref.sequences.pop().unwrap();
@@ -149,6 +176,7 @@ impl TrackAudioCombiner {
 		channels_ref.output.send(*tup);
 	    }
 
+	}
 	}
     }
 }

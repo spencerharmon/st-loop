@@ -35,6 +35,7 @@ pub struct Dispatcher {
     audio_sequences: Rc<RefCell<Vec<RefCell<AudioSequence>>>>,
     sync: st_sync::client::Client,
     nsm: nsm::Client,
+    tick_fanout: TickFanoutCommander,
     track_combiners: Vec<TrackAudioCombinerCommander>
 }
 
@@ -81,8 +82,9 @@ impl Dispatcher {
 	    track_combiners.push(t);
 
 	    //todo remove me
-	    start_playing.send(i);
-	}
+//	    start_playing.send(i);
+    }
+	
 	
 	Dispatcher {
 	    start_playing,
@@ -99,6 +101,7 @@ impl Dispatcher {
 	    audio_sequences,
 	    sync,
 	    nsm,
+	    tick_fanout,
 	    track_combiners
 	}
     }
@@ -133,7 +136,16 @@ impl Dispatcher {
 
 
 	loop {
-	    tokio::time::sleep(time::Duration::from_millis(10));
+	    /*
+	    crossbeam::select! {
+		recv(command_rx) -> midi_command {
+		    if let Ok(c) = midi_command {
+			self.command_manager.process_midi(c);
+		    }
+		}
+	}
+	    */
+	    thread::sleep(time::Duration::from_millis(10));
 	}
     }
     fn get_first_beat_frame(&self) -> usize {

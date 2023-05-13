@@ -1,5 +1,6 @@
 use crossbeam_channel::*;
 use crossbeam;
+use std::{thread, time};
 
 pub enum TickFanoutCommand {
     NewRecipient { sender: Sender<()> }
@@ -71,16 +72,17 @@ impl TickFanout {
 		recv(command_rx) -> command => {
 		    if let Ok(c) = command {
 			self.process_command(c, &mut channels);
+
+			thread::sleep(time::Duration::from_millis(10));
 		    }
 		}
 		recv(channels.tick) -> _ => {
 		    self.fanout_process(&mut channels);
+		    thread::sleep(time::Duration::from_millis(1));
 		}
 	    }
-
 	}
     }
-
     
     fn process_command(
 	&self,
