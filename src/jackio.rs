@@ -42,8 +42,8 @@ impl JackIO {
 	//audio channels
 	let audio_channel_count = 8;
 	// use ref cell to create in loop
-	let mut audio_out_tx_channels = Vec::<(Sender<f32>, Sender<f32>)>::new();
-	let mut audio_out_rx_channels = Vec::new();
+	let mut audio_out_tx_channels = Vec::new();
+	let mut audio_out_rx_channels = Vec::<Receiver<(f32, f32)>>::new();
 	let mut audio_in_tx_channels = Vec::new();
 	let mut audio_in_rx_channels = Vec::new();
 	let mut audio_in_jack_ports = Vec::new();
@@ -85,12 +85,11 @@ impl JackIO {
 	    b_audio_out_ports.push((out_l, out_r));
 
 	    //channels
-	    let (out_l_tx, out_l_rx) = unbounded();
-	    let (out_r_tx, out_r_rx) = unbounded();
+	    let (out_tx, out_rx) = unbounded();
 	    let (in_tx, in_rx) = unbounded();
 	
-	    b_audio_out_rx_channels.push((out_l_rx, out_r_rx));
-	    b_audio_out_tx_channels.push((out_l_tx, out_r_tx));
+	    b_audio_out_rx_channels.push(out_rx);
+	    b_audio_out_tx_channels.push(out_tx);
 	    b_audio_in_rx_channels.push(in_rx);
 	    b_audio_in_tx_channels.push(in_tx);
 
@@ -207,14 +206,39 @@ impl JackIO {
 				b_audio_out_ports
 				.get_mut(t)
 				.unwrap();
-			    let (ref mut out_l_rx, ref mut out_r_rx) =
+			    let ref mut out_rx =
 				b_audio_out_rx_channels
 				.get_mut(t)
 				.unwrap();
 
 			    let mut end = false;
 
-			    // write left output
+
+			    let out_len = out_l.as_mut_slice(ps).len();
+
+			    for i in 0..out_len {
+				let l_sample = out_l.as_mut_slice(ps).get_mut(i).unwrap();
+				let r_sample = out_r.as_mut_slice(ps).get_mut(i).unwrap();
+
+    				if end {
+    				    *l_sample = 0.0;
+    				    *r_sample = 0.0;
+				    continue
+				}
+				match out_rx.try_recv() {
+				    Ok(out_tup) => {
+    					*l_sample = out_tup.0;
+					*r_sample = out_tup.1;
+				    }
+				    Err(_) => {
+    					*l_sample = 0.0;
+    					*r_sample = 0.0;
+					end = true;
+				    }
+				}
+			    }
+			    /*
+    			    // write left output
 			    for v in out_l.as_mut_slice(ps).iter_mut(){
 				if end {
 				    *v = 0.0;
@@ -243,14 +267,17 @@ impl JackIO {
 					}
 				    }
 				}
-			    }
 			}
-		    }
+			    */
+			}//if *b (playing)
+
+    		    }//play/out
+
+    		}//for t in 0..AUDIO_TRACK_COUNT
     		    
-		}
                 jack::Control::Continue
-            },
-        );
+            },//closure
+        ); //jack::ClosureProcessHandler
         let active_client = client.activate_async((), process).unwrap();
 
 	let audio_in_rx_channels = ref_audio_in_rx_channels.borrow_mut().to_vec();
@@ -269,5 +296,5 @@ impl JackIO {
 	    client_pointer.expose_addr()
 	);
 	dispatcher.start().await;
-    }
+    }//start
 }

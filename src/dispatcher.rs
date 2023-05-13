@@ -51,7 +51,7 @@ impl Dispatcher {
         command_rx: Receiver<OwnedMidi>,
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
-        mut audio_out_vec: Vec<(Sender<f32>, Sender<f32>)>,
+        mut audio_out_vec: Vec<Sender<(f32, f32)>>,
         midi_out_vec: Vec<OwnedMidi>,
 	jack_client_addr: usize
     ) -> Dispatcher {

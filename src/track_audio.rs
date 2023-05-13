@@ -33,10 +33,7 @@ pub struct TrackAudioCombinerCommander {
 
 impl TrackAudioCombinerCommander {
     pub fn new(
-	output: (
-	    crossbeam_channel::Sender<f32>,
-	    crossbeam_channel::Sender<f32>
-	),
+	output: crossbeam_channel::Sender<(f32, f32)>,
 	jack_tick: Receiver<()>
     ) -> TrackAudioCombinerCommander {
         let (tx, rx) = mpsc::channel(1);
@@ -65,10 +62,7 @@ impl TrackAudioCombinerCommander {
 
 struct TrackAudioChannels {
     jack_tick: Receiver<()>,
-    output: (
-	crossbeam_channel::Sender<f32>,
-	crossbeam_channel::Sender<f32>
-    ),
+    output: crossbeam_channel::Sender<(f32, f32)>,
     sequences: Vec<Receiver<(f32, f32)>>
 }
 
@@ -158,9 +152,8 @@ impl TrackAudioCombiner {
                 }
             }
 	    }
-	    for (l, r) in buf.iter() {
-		channels_ref.output.0.send(*l);
-		channels_ref.output.1.send(*r);
+	    for tup in buf.iter() {
+		channels_ref.output.send(*tup);
 	    }
 
 	}
