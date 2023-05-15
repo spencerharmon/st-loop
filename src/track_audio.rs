@@ -2,6 +2,9 @@ use std::cell::RefCell;
 use crossbeam_channel::*;
 use crossbeam;
 use std::{thread, time};
+use tokio::sync::RwLock;
+use std::sync::Mutex;
+use std::sync::Arc;
 
 //todo remove me
 pub fn sine_wave_generator(freq: &f32, length: usize, sample_rate: u16) -> Vec<f32> {
@@ -39,11 +42,11 @@ impl TrackAudioCombinerCommander {
         let sequences = Vec::new();
         let c = TrackAudioChannels {
             jack_tick,
-            output,
-            sequences
+            output
         };
 	let s = TrackAudioState {
-	    playing: false
+	    playing: false,
+	    sequences
 	};
         let t = TrackAudioCombiner::new();
         tokio::task::spawn(async move {
@@ -53,23 +56,47 @@ impl TrackAudioCombinerCommander {
 			   
         TrackAudioCombinerCommander { tx }
     }
-    pub fn send_command(self, command: TrackAudioCommand){
+    pub fn send_command(self, command: TrackAudioCommand) -> TrackAudioCombinerCommander {
         self.tx.send(command);
+	self
     }
     
-    pub fn try_send_command(self, command: TrackAudioCommand){
+    pub fn try_send_command(self, command: TrackAudioCommand) -> TrackAudioCombinerCommander {
         self.tx.try_send(command);
+	self
     }
 }
 
 struct TrackAudioChannels {
     jack_tick: Receiver<()>,
     output: Sender<(f32, f32)>,
-    sequences: Vec<Receiver<(f32, f32)>>
 }
 
+#[derive(Debug)]
 struct TrackAudioState {
+    sequences: Vec<Receiver<(f32, f32)>>,
     playing: bool
+}
+
+fn process_command(
+    state: &mut TrackAudioState,
+    command: TrackAudioCommand
+) {
+    match command {
+	TrackAudioCommand::NewSeq { channel } => {
+	    state.sequences.push(channel);
+	}
+	TrackAudioCommand::DelLastSeq => {
+	    state.sequences.pop();
+	}
+	TrackAudioCommand::Play => {
+	    state.playing = true;
+	}
+	TrackAudioCommand::Stop => {
+	    state.playing = false;
+	}
+    }
+    dbg!(&state);
 }
 
 struct TrackAudioCombiner {}
@@ -85,45 +112,35 @@ impl TrackAudioCombiner {
         mut channels: TrackAudioChannels,
 	mut state: TrackAudioState
     ) {
-        
-        loop {
-            crossbeam::select! {
-                recv(command_rx) -> command => {
-                    if let Ok(c) = command {
-                        self.process_command(&mut channels, &mut state, c);
 
-			thread::sleep(time::Duration::from_millis(10));
-                    }
-                },
-                recv(channels.jack_tick) -> _ => {
-                    self.process_sequence_data(&mut channels, &mut state);
+	let state_arc = Arc::new(Mutex::new(state));
 
-		    thread::sleep(time::Duration::from_millis(1));
-                }
-            }
-        }
-    }
+    	let s_clone1 = state_arc.clone();
+    	let s_clone2 = state_arc.clone();
 
-    fn process_command(
-        &self,
-        channels: &mut TrackAudioChannels,
-	state: &mut TrackAudioState,
-        command: TrackAudioCommand
-    ) {
-        match command {
-            TrackAudioCommand::NewSeq { channel } => {
-                channels.sequences.push(channel);
-            }
-            TrackAudioCommand::DelLastSeq => {
-                channels.sequences.pop();
-            }
-	    TrackAudioCommand::Play => {
-		state.playing = true;
+	tokio::task::spawn(async move {
+	    loop {
+		thread::sleep(time::Duration::from_millis(10));
+                if let Ok(command) = command_rx.recv() {
+    		    let mut s = s_clone1.lock().unwrap();
+		    process_command(&mut s, command);
+		}
 	    }
-	    TrackAudioCommand::Stop => {
-		state.playing = false;
+	});
+
+	
+        tokio::task::spawn(async move {
+	    loop {
+		if let Ok(_) = channels.jack_tick.recv() {
+		    continue;
+		    let mut s = s_clone2.lock().unwrap();
+
+		    self.process_sequence_data(&mut channels, &mut s);
+		}
+//		thread::sleep(time::Duration::from_millis(1));
 	    }
-        }
+	}).await;
+
     }
     fn process_sequence_data(
         &self,
@@ -131,52 +148,50 @@ impl TrackAudioCombiner {
 	state: &mut TrackAudioState,
     ) {
 	if state.playing {
-        let mut buf = Vec::new();
-	let mut first = true;
-	
-	let n = channels.sequences.len();
-	//todo remove me
-//	let n = 1;
-//	let mut wave = sine_wave_generator(&440f32, 9999, 48000);
-	let channels = RefCell::new(channels);
-        for _ in 0..n {
-	    //todo remove me
-	    /*
-	    for _ in 0..9999 {
-		let x = wave.pop().unwrap();
-//	    dbg!(x);
-		buf.push((x, x));
-	}
-	    */
-	    let mut channels_ref = channels.borrow_mut();
-	    //todo remove if let; only for signal testing. ordinarily we can guarantee there's a seq at this point.
-	    // let mut seq = channels_ref.sequences.pop().unwrap();
-	    if let Some(mut seq) = channels_ref.sequences.pop() {
-	    if first {
-		loop {
-                    if let Ok(v) = seq.try_recv() {
-                        buf.push(v);
+	    let mut buf = Vec::new();
+	    let mut first = true;
+
+	    let n = state.sequences.len();
+    	    let channels = RefCell::new(channels);
+
+    	    //todo remove me
+	    let n = 1;
+    	    let mut wave = sine_wave_generator(&440f32, 128, 48000);
+
+	    for i in 0..n {
+		//todo remove me
+		for _ in 0..128 {
+		    let x = wave.pop().unwrap();
+		    buf.push((x, x));
+    		}
+		let mut channels_ref = channels.borrow_mut();
+		if let Some(mut seq) = state.sequences.get(i) {
+		    if first {
+			loop {
+			    if let Ok(v) = seq.try_recv() {
+				buf.push(v);
+			    } else {
+				break
+			    }
+			}
+			    first = false;
 		    } else {
-			break
+			if let Ok(v) = seq.try_recv() {
+			    for i in 0..buf.len() {
+				if let Some(tup) = buf.get_mut(i) {
+				    tup.0 = tup.0 + v.0;
+				    tup.1 = tup.1 + v.1;
+				}
+			    }
+			}
 		    }
 		}
-		    first = false;
-	    } else {
-                if let Ok(v) = seq.try_recv() {
-		    for i in 0..buf.len() {
-			if let Some(tup) = buf.get_mut(i) {
-			    tup.0 = tup.0 + v.0;
-			    tup.1 = tup.1 + v.1;
-			}
-                    }
-                }
-            }
-	    }
-	    for tup in buf.iter() {
-		channels_ref.output.send(*tup);
-	    }
+		for tup in buf.iter() {
+		    channels_ref.output.send(*tup);
+		}
 
-	}
+	    }
 	}
     }
 }
+

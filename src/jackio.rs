@@ -114,6 +114,7 @@ impl JackIO {
 		let mut b_audio_out_rx_channels = ref_audio_out_rx_channels.borrow_mut();
 		let mut b_audio_in_tx_channels = ref_audio_in_tx_channels.borrow_mut();
 
+//		println!("jack");
 		ps_tx.try_send(());
 
 		//set recording tracks

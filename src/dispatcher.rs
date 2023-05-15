@@ -75,16 +75,25 @@ impl Dispatcher {
 
 	let mut tick_fanout = TickFanoutCommander::new(ps_rx);
 	let mut track_combiners = Vec::new();
+	/*
 	for i in 0..AUDIO_TRACK_COUNT {
 	    let (tick_tx, tick_rx) = bounded(1);
 	    tick_fanout = tick_fanout.send_command(TickFanoutCommand::NewRecipient{ sender: tick_tx });
 	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), tick_rx);
-	    track_combiners.push(t);
-
 	    //todo remove me
+
+	    if (i == 0){
+//		let t = t.send_command(TrackAudioCommand::Play);
+		track_combiners.push(t);
+	    } else {
+		track_combiners.push(t);
+	    }
+	    
+	    
 //	    start_playing.send(i);
-    }
-	
+
+	}
+	*/
 	
 	Dispatcher {
 	    start_playing,
@@ -153,6 +162,7 @@ impl Dispatcher {
 	    if let Ok(frame) = self.sync.try_recv_next_beat_frame() {
 		return frame as usize
 	    }
+	    thread::sleep(time::Duration::from_millis(10));
 	}
     }
 }
