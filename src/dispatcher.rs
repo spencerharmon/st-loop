@@ -1,5 +1,4 @@
 use crossbeam_channel::*;
-use crate::command_manager::CommandManager;
 use crate::scene::Scene;
 use crate::track::*;
 use crate::constants::*;
@@ -9,10 +8,8 @@ use crate::yaml_config::*;
 use crate::track_audio::*;
 use crate::tick_fanout::*;
 use crate::track_audio::*;
-use st_lib::owned_midi::*;
 use std::rc::Rc;
 use std::cell::RefCell;
-use jack::jack_sys as j;
 use std::mem::MaybeUninit;
 use std::collections::BTreeMap;
 use std::fs::{File, create_dir};
@@ -21,10 +18,8 @@ use std::{thread, time};
 use tokio::task;
 
 pub struct Dispatcher {
-    command_manager: CommandManager,
     scenes: Rc<RefCell<Vec<Scene>>>,
     audio_sequences: Rc<RefCell<Vec<RefCell<AudioSequence>>>>,
-    sync: st_sync::client::Client,
     nsm: nsm::Client,
     tick_fanout: TickFanoutCommander,
     track_combiners: Vec<TrackAudioCombinerCommander>
@@ -35,7 +30,6 @@ impl Dispatcher {
 	ps_rx: Receiver<()>,
         mut audio_out_vec: Vec<Sender<(f32, f32)>>,
     ) -> Dispatcher {
-	let command_manager = CommandManager::new();
 
 	//make scenes
 	let scene_count = 8;
@@ -49,7 +43,7 @@ impl Dispatcher {
 	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
 
 	//st-sync client
-	let sync = st_sync::client::Client::new();
+//	let sync = st_sync::client::Client::new();
 
 	//nsm client
 	let nsm = nsm::Client::new();
@@ -74,22 +68,15 @@ impl Dispatcher {
 	
 	
 	Dispatcher {
-	    command_manager,
 	    scenes,
 	    audio_sequences,
-	    sync,
 	    nsm,
 	    tick_fanout,
 	    track_combiners
 	}
     }
     pub async fn start(mut self) {
-	let mut next_beat_frame = (&self).get_first_beat_frame();
-	
 	let mut beat_this_cycle = false;
-
-
-
 
 	let mut pos_frame = 0;
 	let mut framerate = 48000;
@@ -107,24 +94,8 @@ impl Dispatcher {
 
 
 	loop {
-	    /*
-	    crossbeam::select! {
-		recv(command_rx) -> midi_command {
-		    if let Ok(c) = midi_command {
-			self.command_manager.process_midi(c);
-		    }
-		}
-	}
-	    */
 	    thread::sleep(time::Duration::from_millis(10));
 	}
     }
-    fn get_first_beat_frame(&self) -> usize {
-	loop {
-	    if let Ok(frame) = self.sync.try_recv_next_beat_frame() {
-		return frame as usize
-	    }
-	    thread::sleep(time::Duration::from_millis(10));
-	}
-    }
+
 }

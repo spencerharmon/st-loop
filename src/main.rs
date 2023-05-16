@@ -3,7 +3,6 @@
 mod dispatcher;
 mod track_audio;
 mod tick_fanout;
-mod command_manager;
 mod scene;
 mod track;
 mod sequence;
