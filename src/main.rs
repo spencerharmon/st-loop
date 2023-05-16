@@ -1,6 +1,5 @@
 #![feature(cell_leak,strict_provenance,drain_filter,get_mut_unchecked)]
 
-mod jackio;
 mod dispatcher;
 mod track_audio;
 mod tick_fanout;
@@ -12,12 +11,13 @@ mod midi_control;
 mod constants;
 mod nsm;
 mod yaml_config;
+mod fake_jack;
 
 use tokio;
 
 #[tokio::main]
 async fn main() {
-    let io = jackio::JackIO::new();
+    let io = fake_jack::FakeJack::new();
     io.start().await;
     loop {
       continue

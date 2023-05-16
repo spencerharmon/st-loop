@@ -116,8 +116,10 @@ impl TrackAudioCombiner {
 	let state_arc = Arc::new(Mutex::new(state));
 
     	let s_clone1 = state_arc.clone();
+
     	let s_clone2 = state_arc.clone();
 
+	/*
 	tokio::task::spawn(async move {
 	    loop {
 		thread::sleep(time::Duration::from_millis(10));
@@ -126,16 +128,17 @@ impl TrackAudioCombiner {
 		    process_command(&mut s, command);
 		}
 	    }
-	});
+
+    });
+	*/
 
 	
         tokio::task::spawn(async move {
 	    loop {
 		if let Ok(_) = channels.jack_tick.recv() {
-		    continue;
-		    let mut s = s_clone2.lock().unwrap();
+//		    let mut s = s_clone2.lock().unwrap();
 
-		    self.process_sequence_data(&mut channels, &mut s);
+//		    self.process_sequence_data(&mut channels, &mut s);
 		}
 //		thread::sleep(time::Duration::from_millis(1));
 	    }
