@@ -9,6 +9,7 @@ use crate::scene::Scene;
 use crate::constants::*;
 use std::rc::Rc;
 use std::cell::RefCell;
+use tokio::sync::mpsc;
 
 pub struct JackIO;
 
@@ -93,7 +94,7 @@ impl JackIO {
 
 	}
 	
-	let (ps_tx, ps_rx) = bounded(1);
+	let (tick_tx, tick_rx) = mpsc::channel(1);
         let mut command_midi_port = client
             .register_port("command", jack::MidiIn::default())
             .unwrap();
@@ -115,7 +116,7 @@ impl JackIO {
 		let mut b_audio_in_tx_channels = ref_audio_in_tx_channels.borrow_mut();
 
 //		println!("jack");
-		ps_tx.try_send(());
+		tick_tx.try_send(());
 
 		//set recording tracks
 		loop {
@@ -244,18 +245,19 @@ impl JackIO {
 	let audio_in_rx_channels = ref_audio_in_rx_channels.borrow_mut().to_vec();
 	let audio_out_tx_channels = ref_audio_out_tx_channels.borrow_mut().to_vec();
 	let mut dispatcher = Dispatcher::new(
-	    ps_rx,
-	    start_playing_tx,
 	    stop_playing_tx,
 	    start_recording_tx,
 	    stop_recording_tx,
 	    command_midi_rx,
 	    audio_in_rx_channels,
 	    midi_rx_channels,
-	    audio_out_tx_channels,
 	    midi_tx_channels,
 	    client_pointer.expose_addr()
 	);
-	dispatcher.start().await;
+	dispatcher.start(
+	    tick_rx,
+	    audio_out_tx_channels,
+	    start_playing_tx,
+	).await;
     }//start
 }

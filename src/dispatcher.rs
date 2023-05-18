@@ -19,9 +19,9 @@ use std::fs::{File, create_dir};
 use std::io::prelude::*;
 use std::{thread, time};
 use tokio::task;
+use tokio::sync::mpsc;
 
 pub struct Dispatcher {
-    start_playing: Sender<usize>,
     stop_playing: Sender<usize>,
     start_recording: Sender<usize>,
     stop_recording: Sender<usize>,
@@ -34,22 +34,17 @@ pub struct Dispatcher {
     scenes: Rc<RefCell<Vec<Scene>>>,
     audio_sequences: Rc<RefCell<Vec<RefCell<AudioSequence>>>>,
     sync: st_sync::client::Client,
-    nsm: nsm::Client,
-    tick_fanout: TickFanoutCommander,
-    track_combiners: Vec<TrackAudioCombinerCommander>
+    nsm: nsm::Client
 }
 
 impl Dispatcher {
     pub fn new (
-	ps_rx: Receiver<()>,
-	start_playing: Sender<usize>,
 	stop_playing: Sender<usize>,
 	start_recording: Sender<usize>,
 	stop_recording: Sender<usize>,
         command_rx: Receiver<OwnedMidi>,
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
-        mut audio_out_vec: Vec<Sender<(f32, f32)>>,
         midi_out_vec: Vec<OwnedMidi>,
 	jack_client_addr: usize
     ) -> Dispatcher {
@@ -73,30 +68,8 @@ impl Dispatcher {
 	let nsm = nsm::Client::new();
 
 
-	let mut tick_fanout = TickFanoutCommander::new(ps_rx);
-	let mut track_combiners = Vec::new();
-	/*
-	for i in 0..AUDIO_TRACK_COUNT {
-	    let (tick_tx, tick_rx) = bounded(1);
-	    tick_fanout = tick_fanout.send_command(TickFanoutCommand::NewRecipient{ sender: tick_tx });
-	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), tick_rx);
-	    //todo remove me
-
-	    if (i == 0){
-//		let t = t.send_command(TrackAudioCommand::Play);
-		track_combiners.push(t);
-	    } else {
-		track_combiners.push(t);
-	    }
-	    
-	    
-//	    start_playing.send(i);
-
-	}
-	*/
 	
 	Dispatcher {
-	    start_playing,
 	    stop_playing,
 	    start_recording,
 	    stop_recording,
@@ -109,12 +82,32 @@ impl Dispatcher {
 	    scenes,
 	    audio_sequences,
 	    sync,
-	    nsm,
-	    tick_fanout,
-	    track_combiners
+	    nsm
 	}
     }
-    pub async fn start(mut self) {
+    pub async fn start(
+	mut self,
+	jack_tick_rx: mpsc::Receiver<()>,
+        mut audio_out_vec: Vec<Sender<(f32, f32)>>,
+	start_playing: Sender<usize>,
+    ) {
+	let mut tick_fanout = TickFanoutCommander::new(jack_tick_rx);
+	let mut track_combiners = Vec::new();
+
+	for i in 0..AUDIO_TRACK_COUNT {
+	    let (tick_tx, tick_rx) = mpsc::channel(1);
+	    tick_fanout = tick_fanout.send_command(TickFanoutCommand::NewRecipient{ sender: tick_tx }).await;
+	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), tick_rx);
+	    //todo remove me
+
+
+	    let t = t.send_command(TrackAudioCommand::Play).await;
+
+	    track_combiners.push(t);
+	    
+	    start_playing.send(i);
+
+	}
 	let mut next_beat_frame = (&self).get_first_beat_frame();
 	
 	let mut beat_this_cycle = false;

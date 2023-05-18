@@ -1,6 +1,5 @@
-use crossbeam_channel::*;
-use crossbeam;
 use std::{thread, time};
+use tokio::sync::mpsc::*;
 
 pub enum TickFanoutCommand {
     NewRecipient { sender: Sender<()> }
@@ -13,7 +12,7 @@ pub struct TickFanoutCommander {
 impl TickFanoutCommander {
     pub fn new(tick: Receiver<()>) -> TickFanoutCommander {
 	let recipients: Vec<Sender<()>> = Vec::new();
-	let (command_tx, mut command_rx) = bounded(1);
+	let (command_tx, mut command_rx) = channel(1);
 	let mut recipients = Vec::new();
 	let channels = TickFanoutChannels {
 	    tick,
@@ -31,8 +30,8 @@ impl TickFanoutCommander {
 	    tx: command_tx
 	}
     }
-    pub fn send_command(self, command: TickFanoutCommand) -> TickFanoutCommander {
-	self.tx.send(command);
+    pub async fn send_command(self, command: TickFanoutCommand) -> TickFanoutCommander {
+	self.tx.send(command).await;
 	self
     }
     
@@ -68,17 +67,17 @@ impl TickFanout {
 //	let channels_rw = RwLock::new(channels);
 //        let mut channels_lock = channels_rw.write().await;
 	loop {
-	    crossbeam::select! {
-		recv(command_rx) -> command => {
-		    if let Ok(c) = command {
+	    tokio::select! {
+		command = command_rx.recv() => {
+		    if let Some(c) = command {
 			self.process_command(c, &mut channels);
 
-			thread::sleep(time::Duration::from_millis(10));
+//			thread::sleep(time::Duration::from_millis(10));
 		    }
 		}
-		recv(channels.tick) -> _ => {
-		    self.fanout_process(&mut channels);
-		    thread::sleep(time::Duration::from_millis(1));
+		_ = channels.tick.recv() => {
+		    self.fanout_process(&mut channels).await;
+//		    thread::sleep(time::Duration::from_millis(1));
 		}
 	    }
 	}
@@ -97,12 +96,12 @@ impl TickFanout {
 
     }
 
-    fn fanout_process(
+    async fn fanout_process(
 	&self,
 	channels: &mut TickFanoutChannels
     ) {
 	for recipient in &channels.recipients {
-		recipient.send(());
+		recipient.send(()).await;
 	}
     }
 }

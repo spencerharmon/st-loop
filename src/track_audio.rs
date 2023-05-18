@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use crossbeam_channel::*;
-use crossbeam;
+//use crossbeam;
 use std::{thread, time};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc};
 use std::sync::Mutex;
 use std::sync::Arc;
 
@@ -25,20 +25,20 @@ pub enum TrackAudioCommand {
 }
 
 struct TrackAudioData {
-    command_rx: Receiver<TrackAudioCommand>,
-    jack_tick: Receiver<()>,
+    command_rx: mpsc::Receiver<TrackAudioCommand>,
+    jack_tick: mpsc::Receiver<()>,
 }
 
 pub struct TrackAudioCombinerCommander {
-    tx: Sender<TrackAudioCommand>
+    tx: mpsc::Sender<TrackAudioCommand>
 }
 
 impl TrackAudioCombinerCommander {
     pub fn new(
 	output: Sender<(f32, f32)>,
-	jack_tick: Receiver<()>
+	jack_tick: mpsc::Receiver<()>
     ) -> TrackAudioCombinerCommander {
-        let (tx, rx) = bounded(1);
+        let (tx, rx) = mpsc::channel(1);
         let sequences = Vec::new();
         let c = TrackAudioChannels {
             jack_tick,
@@ -53,11 +53,10 @@ impl TrackAudioCombinerCommander {
 	    t.start(rx, c, s).await;
 	});
 
-			   
         TrackAudioCombinerCommander { tx }
     }
-    pub fn send_command(self, command: TrackAudioCommand) -> TrackAudioCombinerCommander {
-        self.tx.send(command);
+    pub async fn send_command(self, command: TrackAudioCommand) -> TrackAudioCombinerCommander {
+        self.tx.send(command).await;
 	self
     }
     
@@ -68,7 +67,7 @@ impl TrackAudioCombinerCommander {
 }
 
 struct TrackAudioChannels {
-    jack_tick: Receiver<()>,
+    jack_tick: mpsc::Receiver<()>,
     output: Sender<(f32, f32)>,
 }
 
@@ -108,7 +107,7 @@ impl TrackAudioCombiner {
 
     pub async fn start(
         mut self,
-        mut command_rx: Receiver<TrackAudioCommand>,
+        mut command_rx: mpsc::Receiver<TrackAudioCommand>,
         mut channels: TrackAudioChannels,
 	mut state: TrackAudioState
     ) {
@@ -118,12 +117,20 @@ impl TrackAudioCombiner {
     	let s_clone1 = state_arc.clone();
     	let s_clone2 = state_arc.clone();
 
+	
 	tokio::task::spawn(async move {
 	    loop {
-		thread::sleep(time::Duration::from_millis(10));
-                if let Ok(command) = command_rx.recv() {
-    		    let mut s = s_clone1.lock().unwrap();
-		    process_command(&mut s, command);
+		//		thread::sleep(time::Duration::from_millis(10));
+		println!("spawned");
+                if let Some(command) = command_rx.recv().await {
+    		    match s_clone1.lock() {
+			Ok(mut s) => {
+			    process_command(&mut s, command);
+			}
+			_ => {
+			    println!("ohnooo");
+			}
+		    }
 		}
 	    }
 	});
@@ -131,8 +138,7 @@ impl TrackAudioCombiner {
 	
         tokio::task::spawn(async move {
 	    loop {
-		if let Ok(_) = channels.jack_tick.recv() {
-		    continue;
+		if let Some(_) = channels.jack_tick.recv().await {
 		    let mut s = s_clone2.lock().unwrap();
 
 		    self.process_sequence_data(&mut channels, &mut s);
@@ -194,4 +200,5 @@ impl TrackAudioCombiner {
 	}
     }
 }
+
 
