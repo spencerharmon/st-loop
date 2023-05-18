@@ -117,36 +117,21 @@ impl TrackAudioCombiner {
     	let s_clone1 = state_arc.clone();
     	let s_clone2 = state_arc.clone();
 
-	
-	tokio::task::spawn(async move {
-	    loop {
-		//		thread::sleep(time::Duration::from_millis(10));
-		println!("spawned");
-                if let Some(command) = command_rx.recv().await {
-    		    match s_clone1.lock() {
-			Ok(mut s) => {
-			    process_command(&mut s, command);
-			}
-			_ => {
-			    println!("ohnooo");
-			}
+
+	loop {
+	    tokio::select! {
+		command = command_rx.recv() => {
+		    if let Some(c) = command {
+			let mut s = s_clone1.lock().unwrap();
+			process_command(&mut s, c);
 		    }
 		}
-	    }
-	});
-
-	
-        tokio::task::spawn(async move {
-	    loop {
-		if let Some(_) = channels.jack_tick.recv().await {
+		_ = channels.jack_tick.recv() => {
 		    let mut s = s_clone2.lock().unwrap();
-
 		    self.process_sequence_data(&mut channels, &mut s);
 		}
-//		thread::sleep(time::Duration::from_millis(1));
 	    }
-	}).await;
-
+	}
     }
     fn process_sequence_data(
         &self,
@@ -161,15 +146,16 @@ impl TrackAudioCombiner {
     	    let channels = RefCell::new(channels);
 
     	    //todo remove me
-	    let n = 1;
-    	    let mut wave = sine_wave_generator(&440f32, 128, 48000);
-
+//	    let n = 1;
+//    	    let mut wave = sine_wave_generator(&440f32, 128, 48000);
 	    for i in 0..n {
+		/*
 		//todo remove me
 		for _ in 0..128 {
 		    let x = wave.pop().unwrap();
 		    buf.push((x, x));
-    		}
+    	    }
+		*/
 		let mut channels_ref = channels.borrow_mut();
 		if let Some(mut seq) = state.sequences.get(i) {
 		    if first {
