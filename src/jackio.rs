@@ -11,6 +11,13 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use tokio::sync::mpsc;
 
+pub enum JackioCommand {
+    StartPlaying { track: usize },
+    StopPlaying { track: usize },
+    StartRecording { track: usize },
+    StopRecording { track: usize },
+}
+
 pub struct JackIO;
 
 impl JackIO {
@@ -18,6 +25,8 @@ impl JackIO {
         JackIO { }
     }
     pub async fn start(self)  {
+        let (jack_command_tx, mut jack_command_rx) = mpsc::channel(100);
+	/*
 
 	//signals jack callback to start and stop sending data from a track
         let (start_recording_tx, start_recording_rx) = bounded(100);
@@ -27,6 +36,7 @@ impl JackIO {
         let (start_playing_tx, start_playing_rx) = bounded(100);
         let (stop_playing_tx, stop_playing_rx) = bounded(100);
 
+	*/
 	//used by CommandManager
 	let (command_midi_tx, command_midi_rx) = bounded(100);
 
@@ -115,52 +125,38 @@ impl JackIO {
 		let mut b_audio_out_rx_channels = ref_audio_out_rx_channels.borrow_mut();
 		let mut b_audio_in_tx_channels = ref_audio_in_tx_channels.borrow_mut();
 
-//		println!("jack");
 		tick_tx.try_send(());
 
-		//set recording tracks
 		loop {
-		    if let Ok(track) = start_recording_rx.try_recv(){
-			if let Some(b) = recording.get_mut(track) {
-			    *b = true;
+		    if let Ok(command) = jack_command_rx.try_recv() {
+			match command {
+			    JackioCommand::StartPlaying { track } => {
+				if let Some(b) = playing.get_mut(track) {
+				    *b = true;
+				}
+			    }
+			    JackioCommand::StopPlaying { track } => {
+				if let Some(b) = playing.get_mut(track) {
+				    *b = false;
+				}
+			    }
+			    JackioCommand::StartRecording { track } => {
+				if let Some(b) = recording.get_mut(track) {
+				    *b = true;
+				}
+			    }
+			    JackioCommand::StopRecording { track } => {
+				if let Some(b) = recording.get_mut(track) {
+				    *b = false;
+				}
+			    }
+				
 			}
 		    } else {
 			break
 		    }
 		}
-
-		loop {
-		    if let Ok(track) = stop_recording_rx.try_recv(){
-			if let Some(b) = recording.get_mut(track) {
-			    *b = false;
-			}
-		    } else {
-			break
-		    }
-		}		
-		//set playing tracks
-		loop {
-		    if let Ok(track) = start_playing_rx.try_recv(){
-			println!("Start playing: {}", track);
-			if let Some(b) = playing.get_mut(track) {
-			    *b = true;
-			}
-		    } else {
-			break
-		    }
-		}
-
-		loop {
-		    if let Ok(track) = stop_playing_rx.try_recv(){
-			println!("Stop playing: {}", track);
-			if let Some(b) = playing.get_mut(track) {
-			    *b = false;
-			}
-		    } else {
-			break
-		    }
-		}		
-
+		
 		let mut command_midi_in = command_midi_port.iter(ps);
 		for s in command_midi_in{
 		    let om = OwnedMidi { time: s.time, bytes: s.bytes.to_owned() };
@@ -245,9 +241,6 @@ impl JackIO {
 	let audio_in_rx_channels = ref_audio_in_rx_channels.borrow_mut().to_vec();
 	let audio_out_tx_channels = ref_audio_out_tx_channels.borrow_mut().to_vec();
 	let mut dispatcher = Dispatcher::new(
-	    stop_playing_tx,
-	    start_recording_tx,
-	    stop_recording_tx,
 	    command_midi_rx,
 	    audio_in_rx_channels,
 	    midi_rx_channels,
@@ -257,7 +250,7 @@ impl JackIO {
 	dispatcher.start(
 	    tick_rx,
 	    audio_out_tx_channels,
-	    start_playing_tx,
+	    jack_command_tx,
 	).await;
     }//start
 }

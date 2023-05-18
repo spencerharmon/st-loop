@@ -9,6 +9,7 @@ use crate::yaml_config::*;
 use crate::track_audio::*;
 use crate::tick_fanout::*;
 use crate::track_audio::*;
+use crate::jackio::*;
 use st_lib::owned_midi::*;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -22,9 +23,6 @@ use tokio::task;
 use tokio::sync::mpsc;
 
 pub struct Dispatcher {
-    stop_playing: Sender<usize>,
-    start_recording: Sender<usize>,
-    stop_recording: Sender<usize>,
     command_rx: Receiver<OwnedMidi>,
     audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
@@ -39,9 +37,6 @@ pub struct Dispatcher {
 
 impl Dispatcher {
     pub fn new (
-	stop_playing: Sender<usize>,
-	start_recording: Sender<usize>,
-	stop_recording: Sender<usize>,
         command_rx: Receiver<OwnedMidi>,
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
@@ -70,9 +65,6 @@ impl Dispatcher {
 
 	
 	Dispatcher {
-	    stop_playing,
-	    start_recording,
-	    stop_recording,
 	    command_rx, 
             audio_in_vec,
             midi_in_vec, 
@@ -89,7 +81,7 @@ impl Dispatcher {
 	mut self,
 	jack_tick_rx: mpsc::Receiver<()>,
         mut audio_out_vec: Vec<Sender<(f32, f32)>>,
-	start_playing: Sender<usize>,
+	jack_command_tx: mpsc::Sender<JackioCommand>,
     ) {
 	let mut tick_fanout = TickFanoutCommander::new(jack_tick_rx);
 	let mut track_combiners = Vec::new();
@@ -101,11 +93,11 @@ impl Dispatcher {
 	    //todo remove me
 
 
-	    let t = t.send_command(TrackAudioCommand::Play).await;
+//	    let t = t.send_command(TrackAudioCommand::Play).await;
 
 	    track_combiners.push(t);
 	    
-	    start_playing.send(i);
+//	    jack_command_tx.send(JackioCommand::StartPlaying{track: i}).await;
 
 	}
 	let mut next_beat_frame = (&self).get_first_beat_frame();
