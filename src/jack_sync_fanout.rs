@@ -2,6 +2,17 @@ use std::{thread, time};
 use tokio::sync::mpsc::*;
 use jack::jack_sys as j;
 use std::mem::MaybeUninit;
+use tokio::sync::mpsc;
+
+
+struct JackSyncFanoutMessage {
+    pos_frame: usize,
+    framerate: usize,
+    beats_per_bar: usize,
+    beat: usize,
+    next_beat_frame: usize,
+    beat_this_cycle: bool
+}
 
 pub enum JackSyncFanoutCommand {
     NewRecipient { sender: Sender<()> }
@@ -57,16 +68,30 @@ unsafe impl Send for JackSyncFanoutChannels {}
     
 
 pub struct JackSyncFanout {
-    jack_client_addr: usize
+    jack_client_addr: usize,
+    sync: st_sync::client::Client,
+    next_beat_frame: usize,
+    last_frame: usize
 }
 
 impl JackSyncFanout {
     pub fn new(jack_client_addr: usize) -> JackSyncFanout {
-	JackSyncFanout { jack_client_addr }
+	let sync = st_sync::client::Client::new();
+	let mut next_beat_frame = 0;
+	loop {
+	    if let Ok(frame) = sync.try_recv_next_beat_frame() {
+		 next_beat_frame = frame as usize
+
+	    }
+	    thread::sleep(time::Duration::from_millis(10));
+	}
+
+	let last_frame = 0;
+	JackSyncFanout { jack_client_addr, sync, next_beat_frame, last_frame}
     }
 
     async fn start(
-	self,
+	mut self,
 	mut command_rx: Receiver<JackSyncFanoutCommand>,
 	mut channels: JackSyncFanoutChannels
     ) {
@@ -103,24 +128,45 @@ impl JackSyncFanout {
     }
 
     fn fanout_process(
-	&self,
+	&mut self,
 	channels: &mut JackSyncFanoutChannels
     ) {
 	let mut pos = MaybeUninit::uninit().as_mut_ptr();
-	let mut pos_frame = 0;
-	let mut framerate = 48000;
-	let mut last_frame = pos_frame;
-	let mut beats_per_bar = 0;
-	let mut beat = 0;
+	let mut msg = JackSyncFanoutMessage{
+	    pos_frame: 0,
+	    framerate: 48000,
+	    beats_per_bar: 0,
+	    beat: 0,
+	    next_beat_frame: 0,
+	    beat_this_cycle: false
+	};
+	
 	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(self.jack_client_addr);
+
 	unsafe {
 	    j::jack_transport_query(client_pointer, pos);
-	    pos_frame = (*pos).frame as usize;
-	    framerate = (*pos).frame_rate as usize;
-	    beats_per_bar = (*pos).beats_per_bar as usize;
-	    beat = (*pos).beat as usize;
+	    msg.pos_frame = (*pos).frame as usize;
+	    msg.framerate = (*pos).frame_rate as usize;
+	    msg.beats_per_bar = (*pos).beats_per_bar as usize;
+	    msg.beat = (*pos).beat as usize;
 	}	    
+	let nframes = msg.pos_frame - self.last_frame;
+
+	if msg.pos_frame >= self.next_beat_frame {
+//		println!("checking");
+	    if let Ok(frame) = (&self).sync.try_recv_next_beat_frame() {
+		self.next_beat_frame = frame as usize;
+//		    println!("next beat frame: {}", next_beat_frame);
+//		    println!("pos frame: {}", pos_frame);
+	    }
+	}
+	if (((self.last_frame < self.next_beat_frame) &&
+	     (self.next_beat_frame <= msg.pos_frame))) ||
+	    self.last_frame == 0 {
+		msg.beat_this_cycle = true;
+	    }	
 	
+	self.last_frame = msg.pos_frame;
 	for recipient in &channels.recipients {
 	    //todo. Can't use async send because pos is not Send (breaks task spawning)
 	    // can't use blocking send because it crashes thread with "Cannot start a runtime from within a runtime"

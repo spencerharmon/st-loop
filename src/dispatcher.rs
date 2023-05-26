@@ -29,7 +29,6 @@ pub struct Dispatcher {
     midi_out_vec: Vec<OwnedMidi>,
     scenes: Rc<RefCell<Vec<Scene>>>,
     audio_sequences: Rc<RefCell<Vec<RefCell<AudioSequence>>>>,
-    sync: st_sync::client::Client,
     nsm: nsm::Client
 }
 
@@ -52,8 +51,6 @@ impl Dispatcher {
 	//make sequences
 	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
 
-	//st-sync client
-	let sync = st_sync::client::Client::new();
 
 	//nsm client
 	let nsm = nsm::Client::new();
@@ -67,7 +64,6 @@ impl Dispatcher {
             midi_out_vec,
 	    scenes,
 	    audio_sequences,
-	    sync,
 	    nsm
 	}
     }
@@ -96,7 +92,7 @@ impl Dispatcher {
 //	    jack_command_tx.send(JackioCommand::StartPlaying{track: i}).await;
 
 	}
-	let mut next_beat_frame = (&self).get_first_beat_frame();
+	let mut next_beat_frame = 0;
 	
 	let mut beat_this_cycle = false;
 
@@ -137,11 +133,6 @@ impl Dispatcher {
 
 	    if pos_frame >= next_beat_frame {
 //		println!("checking");
-		if let Ok(frame) = (&self).sync.try_recv_next_beat_frame() {
-		    next_beat_frame = frame as usize;
-//		    println!("next beat frame: {}", next_beat_frame);
-//		    println!("pos frame: {}", pos_frame);
-		}
 	    }
 	    beat_this_cycle = false;
 	    if (((last_frame < next_beat_frame) &&
@@ -171,12 +162,5 @@ impl Dispatcher {
 	    thread::sleep(time::Duration::from_millis(10));
 	}
     }
-    fn get_first_beat_frame(&self) -> usize {
-	loop {
-	    if let Ok(frame) = self.sync.try_recv_next_beat_frame() {
-		return frame as usize
-	    }
-	    thread::sleep(time::Duration::from_millis(10));
-	}
-    }
+
 }
