@@ -7,7 +7,7 @@ use crate::sequence::*;
 use crate::nsm;
 use crate::yaml_config::*;
 use crate::track_audio::*;
-use crate::tick_fanout::*;
+use crate::jack_sync_fanout::*;
 use crate::track_audio::*;
 use crate::jackio::*;
 use st_lib::owned_midi::*;
@@ -27,8 +27,6 @@ pub struct Dispatcher {
     audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
     midi_out_vec: Vec<OwnedMidi>,
-    jack_client_addr: usize,
-    command_manager: CommandManager,
     scenes: Rc<RefCell<Vec<Scene>>>,
     audio_sequences: Rc<RefCell<Vec<RefCell<AudioSequence>>>>,
     sync: st_sync::client::Client,
@@ -41,9 +39,7 @@ impl Dispatcher {
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
         midi_out_vec: Vec<OwnedMidi>,
-	jack_client_addr: usize
     ) -> Dispatcher {
-	let command_manager = CommandManager::new();
 
 	//make scenes
 	let scene_count = 8;
@@ -69,8 +65,6 @@ impl Dispatcher {
             audio_in_vec,
             midi_in_vec, 
             midi_out_vec,
-	    jack_client_addr,
-	    command_manager,
 	    scenes,
 	    audio_sequences,
 	    sync,
@@ -79,16 +73,18 @@ impl Dispatcher {
     }
     pub async fn start(
 	mut self,
-	jack_tick_rx: mpsc::Receiver<()>,
+	tick_rx: mpsc::Receiver<()>,
         mut audio_out_vec: Vec<Sender<(f32, f32)>>,
 	jack_command_tx: mpsc::Sender<JackioCommand>,
+	jack_client_addr: usize,
     ) {
-	let mut tick_fanout = TickFanoutCommander::new(jack_tick_rx);
+	let mut jsfc = JackSyncFanoutCommander::new(tick_rx, jack_client_addr);
 	let mut track_combiners = Vec::new();
+	let command_manager = CommandManager::new();
 
 	for i in 0..AUDIO_TRACK_COUNT {
 	    let (tick_tx, tick_rx) = mpsc::channel(1);
-	    tick_fanout = tick_fanout.send_command(TickFanoutCommand::NewRecipient{ sender: tick_tx }).await;
+	    jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: tick_tx }).await;
 	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), tick_rx);
 	    //todo remove me
 
@@ -107,7 +103,7 @@ impl Dispatcher {
 
 	let mut pos = MaybeUninit::uninit().as_mut_ptr();
 
-	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(self.jack_client_addr);
+	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(jack_client_addr);
 
 	let mut pos_frame = 0;
 	let mut framerate = 48000;
@@ -130,7 +126,39 @@ impl Dispatcher {
 
 
 	loop {
-	    /*
+	    unsafe {
+		j::jack_transport_query(client_pointer, pos);
+
+		pos_frame = (*pos).frame as usize;
+		beats_per_bar = (*pos).beats_per_bar as usize;
+		beat = (*pos).beat as usize;
+	    }
+	    let nframes = pos_frame - last_frame;
+
+	    if pos_frame >= next_beat_frame {
+//		println!("checking");
+		if let Ok(frame) = (&self).sync.try_recv_next_beat_frame() {
+		    next_beat_frame = frame as usize;
+//		    println!("next beat frame: {}", next_beat_frame);
+//		    println!("pos frame: {}", pos_frame);
+		}
+	    }
+	    beat_this_cycle = false;
+	    if (((last_frame < next_beat_frame) &&
+		(next_beat_frame <= pos_frame))) ||
+		last_frame == 0 {
+		    beat_this_cycle = true;
+
+    		}
+
+	    if beat_this_cycle && beat == 1 {
+		//bar-aligned commands
+		//go
+		if command_manager.go {
+		    
+		}
+	    }
+		/*
 	    crossbeam::select! {
 		recv(command_rx) -> midi_command {
 		    if let Ok(c) = midi_command {
@@ -138,7 +166,8 @@ impl Dispatcher {
 		    }
 		}
 	}
-	    */
+	     */
+	    
 	    thread::sleep(time::Duration::from_millis(10));
 	}
     }

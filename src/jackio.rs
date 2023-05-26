@@ -245,12 +245,12 @@ impl JackIO {
 	    audio_in_rx_channels,
 	    midi_rx_channels,
 	    midi_tx_channels,
-	    client_pointer.expose_addr()
 	);
 	dispatcher.start(
 	    tick_rx,
 	    audio_out_tx_channels,
 	    jack_command_tx,
+	    client_pointer.expose_addr()
 	).await;
     }//start
 }
