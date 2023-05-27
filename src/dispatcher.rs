@@ -109,43 +109,41 @@ impl Dispatcher {
 
 
 	loop {
-	    let jsf_msg = jsf_rx.recv().await.unwrap();
-	    let mut commands = Vec::new();
-	    if jsf_msg.beat_this_cycle && jsf_msg.beat == 1 {
-		println!("cool!");
-		command_req_tx.send(CommandManagerRequest::BarBoundary).await;
-		if let Some(c) = command_reply_rx.recv().await.unwrap(){
-		    commands = c;
-		}
-		println!("ok");
-		//process bar-aligned commands
 
-		for c in &commands {
-		    match c {
-			CommandManagerMessage::Go { tracks, scenes } => {
-			},
-			CommandManagerMessage::Start { scene } => {
-			},
-			_ => {}
+	    command_req_tx.send(CommandManagerRequest::Async).await;
+	    let mut commands = Vec::new();
+	    tokio::select!{
+		jsf_msg_o = jsf_rx.recv() => {
+		    if let Some(jsf_msg) = jsf_msg_o {
+			if jsf_msg.beat_this_cycle && jsf_msg.beat == 1 {
+			    println!("cool!");
+			    command_req_tx.send(CommandManagerRequest::BarBoundary).await;
+			}
 		    }
 		}
-	    } else {
-		command_req_tx.send(CommandManagerRequest::Async).await;
-		if let Some(c) = command_reply_rx.recv().await.unwrap(){
-		    commands = c;
-		}
-	    }
-	    //process async commands
 
-	    for c in &commands {
-		match c {
-		    CommandManagerMessage::Stop => {
-		    },
-		    CommandManagerMessage::Undo => {
-		    },
-		    _ => {}
+		opt = command_reply_rx.recv() => {
+		    println!("ahhh");
+			if let Some(c) = opt {
+			    commands = c;
+			}
+
+			for c in &commands {
+			    match c {
+				CommandManagerMessage::Stop => {
+				},
+				CommandManagerMessage::Undo => {
+				},
+				CommandManagerMessage::Go { tracks, scenes } => {
+
+				},
+				CommandManagerMessage::Start { scene } => {
+
+				}
+			    }
+			}
 		}
-	    }
-	}
-    }
+	    }//tokio::select
+	}//loop
+    }//start()
  }

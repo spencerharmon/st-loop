@@ -53,7 +53,7 @@ impl CommandManager {
 	mut self,
 	mut command_midi_rx: Receiver<OwnedMidi>,
 	mut req_rx: Receiver<CommandManagerRequest>,
-	reply_tx: Sender<Option<Vec<CommandManagerMessage>>>
+	reply_tx: Sender<Vec<CommandManagerMessage>>
     ){
         tokio::task::spawn(async move {
 	    self.thread(
@@ -68,7 +68,7 @@ impl CommandManager {
 	&mut self,
 	mut command_midi_rx: Receiver<OwnedMidi>,
 	mut req_rx: Receiver<CommandManagerRequest>,
-	reply_tx: Sender<Option<Vec<CommandManagerMessage>>>
+	reply_tx: Sender<Vec<CommandManagerMessage>>
     ){
 	loop {
 	    tokio::select!{
@@ -76,8 +76,9 @@ impl CommandManager {
 		    self.process_midi(midi.unwrap());
 		}
 		req = req_rx.recv() => {
-		    let opt = self.process_request(req.unwrap());
-		    reply_tx.send(opt).await;
+		    if let Some(msg) = self.process_request(req.unwrap()){
+			reply_tx.send(msg).await;
+		    }
 		}
 	    }
 	}
