@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use crossbeam_channel::*;
-//use crossbeam;
 use std::{thread, time};
 use tokio::sync::{RwLock, mpsc};
 use std::sync::Mutex;
 use std::sync::Arc;
+use crate::jack_sync_fanout::*;
 
 //todo remove me
 pub fn sine_wave_generator(freq: &f32, length: usize, sample_rate: u16) -> Vec<f32> {
@@ -26,7 +26,7 @@ pub enum TrackAudioCommand {
 
 struct TrackAudioData {
     command_rx: mpsc::Receiver<TrackAudioCommand>,
-    jack_tick: mpsc::Receiver<()>,
+    jack_tick: mpsc::Receiver<JackSyncFanoutMessage>,
 }
 
 pub struct TrackAudioCombinerCommander {
@@ -36,7 +36,7 @@ pub struct TrackAudioCombinerCommander {
 impl TrackAudioCombinerCommander {
     pub fn new(
 	output: Sender<(f32, f32)>,
-	jack_tick: mpsc::Receiver<()>
+	jack_tick: mpsc::Receiver<JackSyncFanoutMessage>
     ) -> TrackAudioCombinerCommander {
         let (tx, rx) = mpsc::channel(1);
         let sequences = Vec::new();
@@ -67,7 +67,7 @@ impl TrackAudioCombinerCommander {
 }
 
 struct TrackAudioChannels {
-    jack_tick: mpsc::Receiver<()>,
+    jack_tick: mpsc::Receiver<JackSyncFanoutMessage>,
     output: Sender<(f32, f32)>,
 }
 

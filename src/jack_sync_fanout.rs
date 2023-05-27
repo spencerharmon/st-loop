@@ -5,17 +5,21 @@ use std::mem::MaybeUninit;
 use tokio::sync::mpsc;
 
 
-struct JackSyncFanoutMessage {
-    pos_frame: usize,
-    framerate: usize,
-    beats_per_bar: usize,
-    beat: usize,
-    next_beat_frame: usize,
-    beat_this_cycle: bool
+
+#[derive(Copy, Clone)]
+pub struct JackSyncFanoutMessage {
+    pub pos_frame: usize,
+    pub framerate: usize,
+    pub beats_per_bar: usize,
+    pub beat: usize,
+    pub nframes: usize,
+    pub next_beat_frame: usize,
+    pub beat_this_cycle: bool
 }
 
+
 pub enum JackSyncFanoutCommand {
-    NewRecipient { sender: Sender<()> }
+    NewRecipient { sender: Sender<JackSyncFanoutMessage> }
 }
 
 pub struct JackSyncFanoutCommander {
@@ -60,7 +64,7 @@ impl JackSyncFanoutCommander {
 #[derive(Debug)]
 pub struct JackSyncFanoutChannels {
     tick: Receiver<()>,
-    recipients: Vec<Sender<()>>,
+    recipients: Vec<Sender<JackSyncFanoutMessage>>,
     
 }
 
@@ -80,8 +84,9 @@ impl JackSyncFanout {
 	let mut next_beat_frame = 0;
 	loop {
 	    if let Ok(frame) = sync.try_recv_next_beat_frame() {
-		 next_beat_frame = frame as usize
-
+		dbg!(frame);
+		next_beat_frame = frame as usize;
+		break;
 	    }
 	    thread::sleep(time::Duration::from_millis(10));
 	}
@@ -137,6 +142,7 @@ impl JackSyncFanout {
 	    framerate: 48000,
 	    beats_per_bar: 0,
 	    beat: 0,
+	    nframes: 0,
 	    next_beat_frame: 0,
 	    beat_this_cycle: false
 	};
@@ -150,7 +156,7 @@ impl JackSyncFanout {
 	    msg.beats_per_bar = (*pos).beats_per_bar as usize;
 	    msg.beat = (*pos).beat as usize;
 	}	    
-	let nframes = msg.pos_frame - self.last_frame;
+	msg.nframes = msg.pos_frame - self.last_frame;
 
 	if msg.pos_frame >= self.next_beat_frame {
 //		println!("checking");
@@ -170,7 +176,7 @@ impl JackSyncFanout {
 	for recipient in &channels.recipients {
 	    //todo. Can't use async send because pos is not Send (breaks task spawning)
 	    // can't use blocking send because it crashes thread with "Cannot start a runtime from within a runtime"
-	    recipient.try_send(());
+	    recipient.try_send(msg);
 	}
     }
 }

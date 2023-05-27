@@ -39,10 +39,10 @@ impl Dispatcher {
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
         midi_out_vec: Vec<OwnedMidi>,
     ) -> Dispatcher {
-
 	//make scenes
 	let scene_count = 8;
 	let scenes = Rc::new(RefCell::new(Vec::new()));
+	
 	// plus 1 because the 0th scene is special empty scene
 	for i in 0..scene_count + 1 {
 	    scenes.borrow_mut().push(Scene{ sequences: Vec::new() });
@@ -51,12 +51,9 @@ impl Dispatcher {
 	//make sequences
 	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
 
-
 	//nsm client
 	let nsm = nsm::Client::new();
 
-
-	
 	Dispatcher {
 	    command_rx, 
             audio_in_vec,
@@ -78,10 +75,13 @@ impl Dispatcher {
 	let mut track_combiners = Vec::new();
 	let command_manager = CommandManager::new();
 
+	let (jsf_tx, mut jsf_rx) = mpsc::channel(1);
+	jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: jsf_tx }).await;
+
 	for i in 0..AUDIO_TRACK_COUNT {
-	    let (tick_tx, tick_rx) = mpsc::channel(1);
-	    jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: tick_tx }).await;
-	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), tick_rx);
+	    let (tx, rx) = mpsc::channel(1);
+	    jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: tx }).await;
+	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), rx);
 	    //todo remove me
 
 
@@ -92,27 +92,8 @@ impl Dispatcher {
 //	    jack_command_tx.send(JackioCommand::StartPlaying{track: i}).await;
 
 	}
-	let mut next_beat_frame = 0;
-	
-	let mut beat_this_cycle = false;
-
-
-	let mut pos = MaybeUninit::uninit().as_mut_ptr();
-
-	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(jack_client_addr);
-
-	let mut pos_frame = 0;
-	let mut framerate = 48000;
-	unsafe {
-	    j::jack_transport_query(client_pointer, pos);
-	    pos_frame = (*pos).frame as usize;
-	    framerate = (*pos).frame_rate as usize;
-	}
-	let mut last_frame = pos_frame;
-	let mut beats_per_bar = 0;
-	let mut beat = 0;
 	let mut scene = 1;
-	let mut governor_on = true;
+	
 	let mut path: String = "~/.config/st-tools/st-loop/".to_string(); 
 
 	let recording_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
@@ -120,46 +101,16 @@ impl Dispatcher {
 	let newest_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
 
 
-
 	loop {
-	    unsafe {
-		j::jack_transport_query(client_pointer, pos);
-
-		pos_frame = (*pos).frame as usize;
-		beats_per_bar = (*pos).beats_per_bar as usize;
-		beat = (*pos).beat as usize;
-	    }
-	    let nframes = pos_frame - last_frame;
-
-	    if pos_frame >= next_beat_frame {
-//		println!("checking");
-	    }
-	    beat_this_cycle = false;
-	    if (((last_frame < next_beat_frame) &&
-		(next_beat_frame <= pos_frame))) ||
-		last_frame == 0 {
-		    beat_this_cycle = true;
-
-    		}
-
-	    if beat_this_cycle && beat == 1 {
+	    let jsf_msg = jsf_rx.recv().await.unwrap();
+	    if jsf_msg.beat_this_cycle && jsf_msg.beat == 1 {
+		println!("cool!");
 		//bar-aligned commands
 		//go
 		if command_manager.go {
 		    
 		}
-	    }
-		/*
-	    crossbeam::select! {
-		recv(command_rx) -> midi_command {
-		    if let Ok(c) = midi_command {
-			self.command_manager.process_midi(c);
-		    }
-		}
-	}
-	     */
-	    
-	    thread::sleep(time::Duration::from_millis(10));
+	    }	    
 	}
     }
 

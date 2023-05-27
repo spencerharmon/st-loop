@@ -25,6 +25,7 @@ impl JackIO {
         JackIO { }
     }
     pub async fn start(self)  {
+
         let (jack_command_tx, mut jack_command_rx) = mpsc::channel(100);
 	/*
 
