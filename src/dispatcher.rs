@@ -110,11 +110,37 @@ impl Dispatcher {
 
 	loop {
 	    let jsf_msg = jsf_rx.recv().await.unwrap();
+	    let mut commands: Vec<CommandManagerMessage>;
 	    if jsf_msg.beat_this_cycle && jsf_msg.beat == 1 {
 		println!("cool!");
-		//bar-aligned commands
-		//go
-	    }	    
+		command_req_tx.send(CommandManagerRequest::BarBoundary);
+		commands = command_reply_rx.recv().await.unwrap();
+		//process bar-aligned commands
+
+		for c in &commands {
+		    match c {
+			CommandManagerMessage::Go { tracks, scenes } => {
+			},
+			CommandManagerMessage::Start { scene } => {
+			},
+			_ => {}
+		    }
+		}
+	    } else {
+		command_req_tx.send(CommandManagerRequest::Async);
+		commands = command_reply_rx.recv().await.unwrap();
+	    }
+	    //process async commands
+
+	    for c in &commands {
+		match c {
+		    CommandManagerMessage::Stop => {
+		    },
+		    CommandManagerMessage::Undo => {
+		    },
+		    _ => {}
+		}
+	    }
 	}
     }
  }

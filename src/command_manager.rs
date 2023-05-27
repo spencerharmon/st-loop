@@ -12,7 +12,7 @@ pub enum CommandManagerMessage {
 	tracks: Vec<usize>,
 	scenes: Vec<usize>
     },
-    Start { scenes: usize },
+    Start { scene: usize },
     Stop,
     Undo
 }
@@ -107,7 +107,7 @@ impl CommandManager {
 		if self.trigger_scene {
 		    ret.push(
 			CommandManagerMessage::Start {
-			    scenes: self.play_scene_idx
+			    scene: self.play_scene_idx
 			}
 		    );
 		    self.trigger_scene = false;
