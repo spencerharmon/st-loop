@@ -53,7 +53,7 @@ impl CommandManager {
 	mut self,
 	mut command_midi_rx: Receiver<OwnedMidi>,
 	mut req_rx: Receiver<CommandManagerRequest>,
-	reply_tx: Sender<Vec<CommandManagerMessage>>
+	reply_tx: Sender<Option<Vec<CommandManagerMessage>>>
     ){
         tokio::task::spawn(async move {
 	    self.thread(
@@ -68,7 +68,7 @@ impl CommandManager {
 	&mut self,
 	mut command_midi_rx: Receiver<OwnedMidi>,
 	mut req_rx: Receiver<CommandManagerRequest>,
-	reply_tx: Sender<Vec<CommandManagerMessage>>
+	reply_tx: Sender<Option<Vec<CommandManagerMessage>>>
     ){
 	loop {
 	    tokio::select!{
@@ -76,12 +76,10 @@ impl CommandManager {
 		    self.process_midi(midi.unwrap());
 		}
 		req = req_rx.recv() => {
-		    if let Some(msg) = self.process_request(req.unwrap()){
-			reply_tx.send(msg).await;
-		    }
+		    let opt = self.process_request(req.unwrap());
+		    reply_tx.send(opt).await;
 		}
 	    }
-	    thread::sleep(time::Duration::from_millis(ASYNC_COMMAND_LATENCY));
 	}
     }
 
@@ -90,7 +88,8 @@ impl CommandManager {
 	req: CommandManagerRequest
     ) -> Option<Vec<CommandManagerMessage>>{
 	let mut ret = Vec::new();
-	if let CommandManagerRequest::BarBoundary = req {
+	if let req = CommandManagerRequest::BarBoundary {
+	    
 		if self.go {
 		    let tracks = self.rec_tracks_idx.to_vec();
 		    let scenes = self.rec_scenes_idx.to_vec();

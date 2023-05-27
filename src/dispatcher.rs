@@ -110,11 +110,14 @@ impl Dispatcher {
 
 	loop {
 	    let jsf_msg = jsf_rx.recv().await.unwrap();
-	    let mut commands: Vec<CommandManagerMessage>;
+	    let mut commands = Vec::new();
 	    if jsf_msg.beat_this_cycle && jsf_msg.beat == 1 {
 		println!("cool!");
-		command_req_tx.send(CommandManagerRequest::BarBoundary);
-		commands = command_reply_rx.recv().await.unwrap();
+		command_req_tx.send(CommandManagerRequest::BarBoundary).await;
+		if let Some(c) = command_reply_rx.recv().await.unwrap(){
+		    commands = c;
+		}
+		println!("ok");
 		//process bar-aligned commands
 
 		for c in &commands {
@@ -127,8 +130,10 @@ impl Dispatcher {
 		    }
 		}
 	    } else {
-		command_req_tx.send(CommandManagerRequest::Async);
-		commands = command_reply_rx.recv().await.unwrap();
+		command_req_tx.send(CommandManagerRequest::Async).await;
+		if let Some(c) = command_reply_rx.recv().await.unwrap(){
+		    commands = c;
+		}
 	    }
 	    //process async commands
 
