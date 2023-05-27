@@ -12,7 +12,7 @@ pub enum CommandManagerMessage {
 	tracks: Vec<usize>,
 	scenes: Vec<usize>
     },
-    Start { scenes: Vec<usize> },
+    Start { scenes: usize },
     Stop,
     Undo
 }
@@ -24,12 +24,13 @@ pub enum CommandManagerRequest {
 
 #[derive(Debug)]
 pub struct CommandManager {
-    pub rec_tracks_idx: Vec<usize>,
-    pub rec_scenes_idx: Vec<usize>,
-    pub play_scene_idx: usize,
-    pub go: bool,
-    pub undo: bool,
-    pub stop: bool
+    rec_tracks_idx: Vec<usize>,
+    rec_scenes_idx: Vec<usize>,
+    play_scene_idx: usize,
+    go: bool,
+    undo: bool,
+    stop: bool,
+    trigger_scene: bool
 }
 impl CommandManager {
     pub fn new ()  -> CommandManager {
@@ -37,25 +38,87 @@ impl CommandManager {
 	let rec_scenes_idx = Vec::new();
 	let play_scene_idx = 0;
 	
-	CommandManager { rec_tracks_idx, rec_scenes_idx, play_scene_idx, go: false, undo: false, stop: false }
+	CommandManager {
+	    rec_tracks_idx,
+	    rec_scenes_idx,
+	    play_scene_idx,
+	    go: false,
+	    undo: false,
+	    stop: false,
+	    trigger_scene: false
+	}
     }
 
     pub fn start(
-	self,
-	command_midi_rx: Receiver<OwnedMidi>,
-	req_rx: Receiver<CommandManagerRequest>,
+	mut self,
+	mut command_midi_rx: Receiver<OwnedMidi>,
+	mut req_rx: Receiver<CommandManagerRequest>,
 	reply_tx: Sender<Vec<CommandManagerMessage>>
-	    
     ){
         tokio::task::spawn(async move {
-	    self.thread().await;
+	    self.thread(
+		command_midi_rx,
+		req_rx,
+		reply_tx
+	    ).await;
 	});
     }
     
-    async fn thread(&self){
+    async fn thread(
+	&mut self,
+	mut command_midi_rx: Receiver<OwnedMidi>,
+	mut req_rx: Receiver<CommandManagerRequest>,
+	reply_tx: Sender<Vec<CommandManagerMessage>>
+    ){
 	loop {
+	    tokio::select!{
+		midi = command_midi_rx.recv() => {
+		    self.process_midi(midi.unwrap());
+		}
+		req = req_rx.recv() => {
+		    if let Some(msg) = self.process_request(req.unwrap()){
+			reply_tx.send(msg).await;
+		    }
+		}
+	    }
 	    thread::sleep(time::Duration::from_millis(ASYNC_COMMAND_LATENCY));
 	}
+    }
+
+    pub fn process_request(
+	&mut self,
+	req: CommandManagerRequest
+    ) -> Option<Vec<CommandManagerMessage>>{
+	let mut ret = Vec::new();
+	match req {
+	    CommandManagerRequest::BarBoundary => {
+		if self.go {
+		    let tracks = self.rec_tracks_idx.to_vec();
+		    let scenes = self.rec_scenes_idx.to_vec();
+		    ret.push(
+			CommandManagerMessage::Go {
+			    tracks,
+			    scenes
+			}
+		    );
+		    self.go = false;
+		    self.rec_tracks_idx.clear();
+		    self.rec_scenes_idx.clear();
+		}
+		if self.trigger_scene {
+		    ret.push(
+			CommandManagerMessage::Start {
+			    scenes: self.play_scene_idx
+			}
+		    );
+		    self.trigger_scene = false;
+		}
+	    },
+	    CommandManagerRequest::Async => {
+		
+	    }
+	}
+	None
     }
     
     pub fn process_midi(&mut self, om: OwnedMidi){
@@ -159,6 +222,7 @@ impl CommandManager {
     fn scene(&mut self, n: usize){
 	if self.rec_tracks_idx.len() == 0 {
 	    self.play_scene_idx = n;
+	    self.trigger_scene = true;
 	} else {
 	    if !self.rec_scenes_idx.contains(&n){
 		self.rec_scenes_idx.push(n);

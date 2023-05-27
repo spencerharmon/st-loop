@@ -39,7 +39,7 @@ impl JackIO {
 
 	*/
 	//used by CommandManager
-	let (command_midi_tx, command_midi_rx) = mpsc::channel(100);
+	let (command_midi_tx, mut command_midi_rx) = mpsc::channel(100);
 
 	//dummy vec of midi senders
 	let midi_tx_channels = Vec::new();
