@@ -74,6 +74,7 @@ impl Dispatcher {
 	let mut jsfc = JackSyncFanoutCommander::new(tick_rx, jack_client_addr);
 	let mut track_combiners = Vec::new();
 	let command_manager = CommandManager::new();
+	command_manager.start();
 
 	let (jsf_tx, mut jsf_rx) = mpsc::channel(1);
 	jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: jsf_tx }).await;
@@ -107,11 +108,7 @@ impl Dispatcher {
 		println!("cool!");
 		//bar-aligned commands
 		//go
-		if command_manager.go {
-		    
-		}
 	    }	    
 	}
     }
-
-}
+ }

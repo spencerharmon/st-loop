@@ -1,9 +1,10 @@
+use std::{thread, time};
 use crate::scene::Scene;
 use jack::RawMidi;
 use st_lib::owned_midi::*;
 use wmidi;
 use crate::midi_control;
-
+use crate::constants::*;
 
 #[derive(Debug)]
 pub struct CommandManager {
@@ -21,6 +22,18 @@ impl CommandManager {
 	let play_scene_idx = 0;
 	
 	CommandManager { rec_tracks_idx, rec_scenes_idx, play_scene_idx, go: false, undo: false, stop: false }
+    }
+
+    pub fn start(self){
+        tokio::task::spawn(async move {
+	    self.thread().await;
+	});
+    }
+    
+    async fn thread(&self){
+	loop {
+	    thread::sleep(time::Duration::from_millis(ASYNC_COMMAND_LATENCY));
+	}
     }
     
     pub fn process_midi(&mut self, om: OwnedMidi){

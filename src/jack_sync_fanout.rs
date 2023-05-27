@@ -3,8 +3,7 @@ use tokio::sync::mpsc::*;
 use jack::jack_sys as j;
 use std::mem::MaybeUninit;
 use tokio::sync::mpsc;
-
-
+use crate::constants::*;
 
 #[derive(Copy, Clone)]
 pub struct JackSyncFanoutMessage {
@@ -88,7 +87,7 @@ impl JackSyncFanout {
 		next_beat_frame = frame as usize;
 		break;
 	    }
-	    thread::sleep(time::Duration::from_millis(10));
+	    thread::sleep(time::Duration::from_millis(ASYNC_COMMAND_LATENCY));
 	}
 
 	let last_frame = 0;
