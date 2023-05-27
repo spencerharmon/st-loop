@@ -90,7 +90,7 @@ impl CommandManager {
 	req: CommandManagerRequest
     ) -> Option<Vec<CommandManagerMessage>>{
 	let mut ret = Vec::new();
-	if let _ =  CommandManagerRequest::BarBoundary {
+	if let CommandManagerRequest::BarBoundary = req {
 		if self.go {
 		    let tracks = self.rec_tracks_idx.to_vec();
 		    let scenes = self.rec_scenes_idx.to_vec();
