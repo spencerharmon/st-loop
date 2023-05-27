@@ -26,8 +26,6 @@ pub struct Dispatcher {
     audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
     midi_out_vec: Vec<OwnedMidi>,
-    scenes: Rc<RefCell<Vec<Scene>>>,
-    audio_sequences: Rc<RefCell<Vec<RefCell<AudioSequence>>>>,
     nsm: nsm::Client
 }
 
@@ -37,18 +35,6 @@ impl Dispatcher {
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
         midi_out_vec: Vec<OwnedMidi>,
     ) -> Dispatcher {
-	//make scenes
-	let scene_count = 8;
-	let scenes = Rc::new(RefCell::new(Vec::new()));
-	
-	// plus 1 because the 0th scene is special empty scene
-	for i in 0..scene_count + 1 {
-	    scenes.borrow_mut().push(Scene{ sequences: Vec::new() });
-	}
-
-	//make sequences
-	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
-
 	//nsm client
 	let nsm = nsm::Client::new();
 
@@ -56,8 +42,6 @@ impl Dispatcher {
             audio_in_vec,
             midi_in_vec, 
             midi_out_vec,
-	    scenes,
-	    audio_sequences,
 	    nsm
 	}
     }
@@ -69,9 +53,21 @@ impl Dispatcher {
 	jack_client_addr: usize,
         command_midi_rx: mpsc::Receiver<OwnedMidi>,
     ) {
+	//make sequences
+	let mut audio_sequences = Vec::<Sequence>::new();
+//	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
+	
+	//make scenes
+//	let scenes = Rc::new(RefCell::new(Vec::new()));
+	let mut scenes = Vec::new();
+	// plus 1 because the 0th scene is special empty scene
+	for i in 0..SCENE_COUNT + 1 {
+	    //	    scenes.borrow_mut().push(Scene{ sequences: Vec::new() });
+	    &scenes.push(Scene{ sequences: Vec::new() });
+	}
+	
 	let mut jsfc = JackSyncFanoutCommander::new(tick_rx, jack_client_addr);
 	let mut track_combiners = Vec::new();
-
 	
 	let (command_req_tx, mut command_req_rx) = mpsc::channel(100);
 	let (command_reply_tx, mut command_reply_rx) = mpsc::channel(100);
@@ -100,7 +96,6 @@ impl Dispatcher {
 
 	}
 	let mut scene = 1;
-	
 	let mut path: String = "~/.config/st-tools/st-loop/".to_string(); 
 
 	let recording_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
@@ -109,7 +104,6 @@ impl Dispatcher {
 
 
 	loop {
-
 	    command_req_tx.send(CommandManagerRequest::Async).await;
 	    let mut commands = Vec::new();
 	    tokio::select!{
@@ -123,25 +117,29 @@ impl Dispatcher {
 		}
 
 		opt = command_reply_rx.recv() => {
-		    println!("ahhh");
-			if let Some(c) = opt {
-			    commands = c;
-			}
+		    if let Some(c) = opt {
+			commands = c;
+		    }
 
-			for c in &commands {
-			    match c {
-				CommandManagerMessage::Stop => {
-				},
-				CommandManagerMessage::Undo => {
-				},
-				CommandManagerMessage::Go { tracks, scenes } => {
+		    for c in &commands {
+			match c {
+			    CommandManagerMessage::Stop => {
+			    },
+			    CommandManagerMessage::Undo => {
+			    },
+			    CommandManagerMessage::Go { tracks: t, scenes: s } => {
+				//create new sequences
 
-				},
-				CommandManagerMessage::Start { scene } => {
-
+			    },
+			    CommandManagerMessage::Start { scene: scene_id } => {
+				let scene = scenes.get(*scene_id).unwrap();
+				for seq_id in &scene.sequences {
+				    let seq = audio_sequences.get(*seq_id).unwrap();
+				    //send the start command
 				}
 			    }
 			}
+		    }
 		}
 	    }//tokio::select
 	}//loop
