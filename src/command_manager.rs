@@ -28,9 +28,9 @@ pub struct CommandManager {
     rec_scenes_idx: Vec<usize>,
     play_scene_idx: usize,
     go: bool,
+    trigger_scene: bool,
     undo: bool,
-    stop: bool,
-    trigger_scene: bool
+    stop: bool
 }
 impl CommandManager {
     pub fn new ()  -> CommandManager {
@@ -43,9 +43,9 @@ impl CommandManager {
 	    rec_scenes_idx,
 	    play_scene_idx,
 	    go: false,
+	    trigger_scene: false,
 	    undo: false,
-	    stop: false,
-	    trigger_scene: false
+	    stop: false
 	}
     }
 
@@ -90,8 +90,7 @@ impl CommandManager {
 	req: CommandManagerRequest
     ) -> Option<Vec<CommandManagerMessage>>{
 	let mut ret = Vec::new();
-	match req {
-	    CommandManagerRequest::BarBoundary => {
+	if let _ =  CommandManagerRequest::BarBoundary {
 		if self.go {
 		    let tracks = self.rec_tracks_idx.to_vec();
 		    let scenes = self.rec_scenes_idx.to_vec();
@@ -113,12 +112,19 @@ impl CommandManager {
 		    );
 		    self.trigger_scene = false;
 		}
-	    },
-	    CommandManagerRequest::Async => {
-		
-	    }
 	}
-	None
+	//command is otherwise CommandManagerRequest::Async
+	if self.stop {
+	    ret.push(CommandManagerMessage::Stop);
+	}
+	if self.undo {
+	    ret.push(CommandManagerMessage::Undo);
+	}
+
+	if ret.len() == 0 {
+	    return None
+	}
+	Some(ret)
     }
     
     pub fn process_midi(&mut self, om: OwnedMidi){
