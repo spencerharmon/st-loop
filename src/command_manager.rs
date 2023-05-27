@@ -42,8 +42,10 @@ impl CommandManager {
 
     pub fn start(
 	self,
+	command_midi_rx: Receiver<OwnedMidi>,
 	req_rx: Receiver<CommandManagerRequest>,
 	reply_tx: Sender<Vec<CommandManagerMessage>>
+	    
     ){
         tokio::task::spawn(async move {
 	    self.thread().await;

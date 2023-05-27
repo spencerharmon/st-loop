@@ -39,7 +39,7 @@ impl JackIO {
 
 	*/
 	//used by CommandManager
-	let (command_midi_tx, command_midi_rx) = bounded(100);
+	let (command_midi_tx, command_midi_rx) = mpsc::channel(100);
 
 	//dummy vec of midi senders
 	let midi_tx_channels = Vec::new();
@@ -242,7 +242,6 @@ impl JackIO {
 	let audio_in_rx_channels = ref_audio_in_rx_channels.borrow_mut().to_vec();
 	let audio_out_tx_channels = ref_audio_out_tx_channels.borrow_mut().to_vec();
 	let mut dispatcher = Dispatcher::new(
-	    command_midi_rx,
 	    audio_in_rx_channels,
 	    midi_rx_channels,
 	    midi_tx_channels,
@@ -251,7 +250,8 @@ impl JackIO {
 	    tick_rx,
 	    audio_out_tx_channels,
 	    jack_command_tx,
-	    client_pointer.expose_addr()
+	    client_pointer.expose_addr(),
+	    command_midi_rx,
 	).await;
     }//start
 }

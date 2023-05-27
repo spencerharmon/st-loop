@@ -23,7 +23,6 @@ use tokio::task;
 use tokio::sync::mpsc;
 
 pub struct Dispatcher {
-    command_rx: Receiver<OwnedMidi>,
     audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
     midi_out_vec: Vec<OwnedMidi>,
@@ -34,7 +33,6 @@ pub struct Dispatcher {
 
 impl Dispatcher {
     pub fn new (
-        command_rx: Receiver<OwnedMidi>,
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
         midi_out_vec: Vec<OwnedMidi>,
@@ -55,7 +53,6 @@ impl Dispatcher {
 	let nsm = nsm::Client::new();
 
 	Dispatcher {
-	    command_rx, 
             audio_in_vec,
             midi_in_vec, 
             midi_out_vec,
@@ -70,6 +67,7 @@ impl Dispatcher {
         mut audio_out_vec: Vec<Sender<(f32, f32)>>,
 	jack_command_tx: mpsc::Sender<JackioCommand>,
 	jack_client_addr: usize,
+        command_midi_rx: mpsc::Receiver<OwnedMidi>,
     ) {
 	let mut jsfc = JackSyncFanoutCommander::new(tick_rx, jack_client_addr);
 	let mut track_combiners = Vec::new();
@@ -78,7 +76,11 @@ impl Dispatcher {
 	let (command_req_tx, mut command_req_rx) = mpsc::channel(100);
 	let (command_reply_tx, mut command_reply_rx) = mpsc::channel(100);
 	let command_manager = CommandManager::new();
-	command_manager.start(command_req_rx, command_reply_tx);
+	command_manager.start(
+	    command_midi_rx,
+	    command_req_rx,
+	    command_reply_tx
+	);
 
 	let (jsf_tx, mut jsf_rx) = mpsc::channel(1);
 	jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: jsf_tx }).await;
