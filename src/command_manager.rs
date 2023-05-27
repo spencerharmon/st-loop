@@ -1,3 +1,4 @@
+use tokio::sync::mpsc::*;
 use std::{thread, time};
 use crate::scene::Scene;
 use jack::RawMidi;
@@ -5,6 +6,21 @@ use st_lib::owned_midi::*;
 use wmidi;
 use crate::midi_control;
 use crate::constants::*;
+
+pub enum CommandManagerMessage {
+    Go {
+	tracks: Vec<usize>,
+	scenes: Vec<usize>
+    },
+    Start { scenes: Vec<usize> },
+    Stop,
+    Undo
+}
+
+pub enum CommandManagerRequest {
+    BarBoundary,
+    Async
+}
 
 #[derive(Debug)]
 pub struct CommandManager {
@@ -24,7 +40,11 @@ impl CommandManager {
 	CommandManager { rec_tracks_idx, rec_scenes_idx, play_scene_idx, go: false, undo: false, stop: false }
     }
 
-    pub fn start(self){
+    pub fn start(
+	self,
+	req_rx: Receiver<CommandManagerRequest>,
+	reply_tx: Sender<Vec<CommandManagerMessage>>
+    ){
         tokio::task::spawn(async move {
 	    self.thread().await;
 	});

@@ -2,7 +2,6 @@ use std::{thread, time};
 use tokio::sync::mpsc::*;
 use jack::jack_sys as j;
 use std::mem::MaybeUninit;
-use tokio::sync::mpsc;
 use crate::constants::*;
 
 #[derive(Copy, Clone)]
@@ -37,9 +36,9 @@ impl JackSyncFanoutCommander {
 	
 	let fan = JackSyncFanout::new(jack_client_addr);
 	unsafe {
-        tokio::task::spawn(async move {
-	    fan.start(command_rx, channels, ).await;
-	});
+            tokio::task::spawn(async move {
+		fan.start(command_rx, channels, ).await;
+	    });
 	}
 
 	

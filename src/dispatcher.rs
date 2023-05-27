@@ -1,5 +1,5 @@
 use crossbeam_channel::*;
-use crate::command_manager::CommandManager;
+use crate::command_manager::*;
 use crate::scene::Scene;
 use crate::track::*;
 use crate::constants::*;
@@ -73,8 +73,12 @@ impl Dispatcher {
     ) {
 	let mut jsfc = JackSyncFanoutCommander::new(tick_rx, jack_client_addr);
 	let mut track_combiners = Vec::new();
+
+	
+	let (command_req_tx, mut command_req_rx) = mpsc::channel(100);
+	let (command_reply_tx, mut command_reply_rx) = mpsc::channel(100);
 	let command_manager = CommandManager::new();
-	command_manager.start();
+	command_manager.start(command_req_rx, command_reply_tx);
 
 	let (jsf_tx, mut jsf_rx) = mpsc::channel(1);
 	jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: jsf_tx }).await;
