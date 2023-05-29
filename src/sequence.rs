@@ -45,7 +45,7 @@ impl AudioSequenceCommander {
 		jack_sync_rx,
 		audio_in,
 		audio_out
-	    );
+	    ).await;
 	});
 	
 	AudioSequenceCommander {
@@ -59,6 +59,7 @@ impl AudioSequenceCommander {
     }
 }
 
+#[derive(Debug)]
 pub struct AudioSequence {
     playing: bool,
     pub recording: bool,
@@ -130,6 +131,32 @@ impl AudioSequence {
 	loop {
 	    tokio::select! {
 		cmd_o = command_rx.recv() => {
+		    if let Some(cmd) = cmd_o {
+			match cmd {
+			    SequenceCommand::StartRecord => {
+				println!("start record");
+				self.recording = true;
+			    }
+			    SequenceCommand::StopRecord =>  {
+				println!("stop record");
+				self.recording = false;
+			    }
+			    SequenceCommand::Play =>  {
+				println!("playing");
+				self.playing = true;
+			    }
+			    SequenceCommand::Stop => {
+				println!("stopping");
+				self.playing = false;
+			    }
+			    SequenceCommand::Save { path } => {
+			    }
+			    SequenceCommand::Load { path } => {
+			    }
+			    
+			}
+		    }
+		    dbg!(&self);
 		}
 		js_o = jack_sync_rx.recv() => {
 		    if let Some(jack_sync_msg) = js_o {
@@ -138,13 +165,15 @@ impl AudioSequence {
 				jack_sync_msg.nframes,
 				jack_sync_msg.pos_frame
 			    ) {
-				for tup in data { 
+				for tup in data {
+				    dbg!(tup);
 				    audio_out.send(tup);
 				}
 			    }
 			} else if self.recording {
-			    let tup = audio_in.recv().unwrap();
-			    self.process_record(tup);
+			    if let Ok(tup) = audio_in.recv() {
+				self.process_record(tup);
+			    }
 			}
 		    }
 		}

@@ -75,6 +75,7 @@ impl Dispatcher {
 	    audio_in_vec,
 	    ais_jsf_rx
 	);
+	jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: ais_jsf_tx }).await;
 
 	
 	let (command_req_tx, mut command_req_rx) = mpsc::channel(100);
@@ -100,7 +101,7 @@ impl Dispatcher {
 
 	}
 	
-	let mut scene = 1;
+	let mut current_scene = 1;
 	let mut path: String = "~/.config/st-tools/st-loop/".to_string(); 
 
 //	let recording_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
@@ -147,18 +148,21 @@ impl Dispatcher {
 				if sync_message_received {
 				    if t.len() == 0 && s.len() == 0 {
 					for seq_id in &recording_sequences {
+					    dbg!(seq_id);
 					    //stop recording and autoplay
 					    let seq = audio_sequences.get(*seq_id).unwrap();
-					    seq.send_command(SequenceCommand::StopRecord);
-					    seq.send_command(SequenceCommand::Play);
+					    seq.send_command(SequenceCommand::StopRecord).await;
+					    jack_command_tx.send(
+						JackioCommand::StopRecording{track: seq.track}
+					    ).await;
+					    
+					    seq.send_command(SequenceCommand::Play).await;
 
 					    playing_sequences.push(*seq_id);
 
+					    
 					    jack_command_tx.send(
 						JackioCommand::StartPlaying{track: seq.track}
-					    ).await;
-					    jack_command_tx.send(
-						JackioCommand::StopRecording{track: seq.track}
 					    ).await;
 					}
 					recording_sequences.clear();
@@ -204,21 +208,26 @@ impl Dispatcher {
 					audio_sequences.push(new_seq_commander);
 
 					let seq_id = audio_sequences.len() - 1;
-					&recording_sequences.push(seq_id);
+    					dbg!(seq_id);
+    					&recording_sequences.push(seq_id);
 					&newest_sequences.push(seq_id);
+
 
 					jack_command_tx.send(
 					    JackioCommand::StartRecording{track: *track}
 					).await;
-
 				    }
 				}
 			    }, //go 
 			    CommandManagerMessage::Start { scene: scene_id } => {
+				current_scene = *scene_id;
 				let scene = scenes.get(*scene_id).unwrap();
 				for seq_id in &scene.sequences {
 				    let seq = audio_sequences.get(*seq_id).unwrap();
-				    //send the start command
+    				    seq.send_command(SequenceCommand::Play).await;
+    				    jack_command_tx.send(
+    					JackioCommand::StartPlaying{track: seq.track}
+				    ).await;
 				}
 			    }
 			}

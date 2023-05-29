@@ -108,7 +108,8 @@ impl CommandManager {
 		    self.rec_tracks_idx.clear();
 		    self.rec_scenes_idx.clear();
 		}
-		if self.trigger_scene {
+	    if self.trigger_scene {
+		println!("trigger scene {}", self.play_scene_idx);
 		    ret.push(
 			CommandManagerMessage::Start {
 			    scene: self.play_scene_idx
