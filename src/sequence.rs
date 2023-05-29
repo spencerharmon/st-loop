@@ -52,7 +52,7 @@ impl AudioSequenceCommander {
 	}
     }
 
-    async fn send_command(self, command: SequenceCommand) {
+    pub async fn send_command(&self, command: SequenceCommand) {
 	self.tx.send(command).await;
     }
 }

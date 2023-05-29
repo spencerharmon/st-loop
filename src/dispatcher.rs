@@ -53,7 +53,7 @@ impl Dispatcher {
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
     ) {
 	//make sequences
-	let mut audio_sequences = Vec::<AudioSequence>::new();
+	let mut audio_sequences = Vec::<AudioSequenceCommander>::new();
 //	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
 	
 	//make scenes
@@ -103,9 +103,12 @@ impl Dispatcher {
 	let mut scene = 1;
 	let mut path: String = "~/.config/st-tools/st-loop/".to_string(); 
 
-	let recording_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
-	let playing_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
-	let newest_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
+//	let recording_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
+//	let playing_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
+//	let newest_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
+	let mut recording_sequences = Vec::<usize>::new();
+	let mut playing_sequences = Vec::<usize>::new();
+	let mut newest_sequences = Vec::<usize>::new();
 
 	let mut sync_message_received = false;
 	let mut framerate = 0;
@@ -144,9 +147,23 @@ impl Dispatcher {
 				if !sync_message_received {
 				    return
 				}
+				if t.len() == 0 && s.len() == 0 {
+
+				    for seq_id in &recording_sequences {
+					//stop recording and autoplay
+					let seq = audio_sequences.get(*seq_id).unwrap();
+					seq.send_command(SequenceCommand::StopRecord);
+					seq.send_command(SequenceCommand::Play);
+
+					playing_sequences.push(*seq_id);
+				    }
+				    recording_sequences.clear();
+				}
 				
 				//create new sequences
 				for track in t {
+				    &recording_sequences.push(*track);
+				    &newest_sequences.push(*track);
 
 				    let (j_tx, mut j_rx) = mpsc::channel(1);
 
@@ -183,6 +200,7 @@ impl Dispatcher {
 					in_rx,
 					out_tx
 				    );
+				    audio_sequences.push(new_seq_commander);
 				}
 			    },
 			    CommandManagerMessage::Start { scene: scene_id } => {
