@@ -10,6 +10,7 @@ use crate::constants::*;
 use std::rc::Rc;
 use std::cell::RefCell;
 use tokio::sync::mpsc;
+use std::collections::VecDeque;
 
 pub enum JackioCommand {
     StartPlaying { track: usize },
@@ -52,7 +53,7 @@ impl JackIO {
 	//audio channels
 	let audio_channel_count = 8;
 	// use ref cell to create in loop
-	let mut audio_out_tx_channels = Vec::new();
+	let mut audio_out_tx_channels = VecDeque::new();
 	let mut audio_out_rx_channels = Vec::<Receiver<(f32, f32)>>::new();
 	let mut audio_in_tx_channels = Vec::new();
 	let mut audio_in_rx_channels = Vec::new();
@@ -98,7 +99,7 @@ impl JackIO {
 	    let (in_tx, in_rx) = unbounded();
 	
 	    b_audio_out_rx_channels.push(out_rx);
-	    b_audio_out_tx_channels.push(out_tx);
+	    b_audio_out_tx_channels.push_back(out_tx);
 	    b_audio_in_rx_channels.push(in_rx);
 	    b_audio_in_tx_channels.push(in_tx);
 
@@ -216,6 +217,7 @@ impl JackIO {
 				}
 				match out_rx.try_recv() {
 				    Ok(out_tup) => {
+//					dbg!(&out_tup);
     					*l_sample = out_tup.0;
 					*r_sample = out_tup.1;
 				    }
@@ -239,7 +241,7 @@ impl JackIO {
         let active_client = client.activate_async((), process).unwrap();
 
 	let audio_in_rx_channels = ref_audio_in_rx_channels.borrow_mut().to_vec();
-	let audio_out_tx_channels = ref_audio_out_tx_channels.borrow_mut().to_vec();
+	let audio_out_tx_channels = ref_audio_out_tx_channels.borrow_mut().clone();
 	let mut dispatcher = Dispatcher::new(
 	    midi_rx_channels,
 	    midi_tx_channels,

@@ -22,6 +22,7 @@ use std::io::prelude::*;
 use std::{thread, time};
 use tokio::task;
 use tokio::sync::mpsc;
+use std::collections::VecDeque;
 
 pub struct Dispatcher {
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
@@ -46,7 +47,7 @@ impl Dispatcher {
     pub async fn start(
 	mut self,
 	tick_rx: mpsc::Receiver<()>,
-        mut audio_out_vec: Vec<Sender<(f32, f32)>>,
+        mut audio_out: VecDeque<Sender<(f32, f32)>>,
 	jack_command_tx: mpsc::Sender<JackioCommand>,
 	jack_client_addr: usize,
         command_midi_rx: mpsc::Receiver<OwnedMidi>,
@@ -92,11 +93,13 @@ impl Dispatcher {
 	for i in 0..AUDIO_TRACK_COUNT {
 	    let (tx, rx) = mpsc::channel(1);
 	    jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: tx }).await;
-	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), rx);
+	    if let Some(chan) = audio_out.pop_front() {
+		let t = TrackAudioCombinerCommander::new(chan, rx);
+		track_combiners.push(t);
+	    }
 	    //todo remove me
 //	    let t = t.send_command(TrackAudioCommand::Play).await;
 
-	    track_combiners.push(t);
 //	    jack_command_tx.send(JackioCommand::StartPlaying{track: i}).await;
 
 	}

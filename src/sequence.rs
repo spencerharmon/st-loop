@@ -156,7 +156,6 @@ impl AudioSequence {
 			    
 			}
 		    }
-		    dbg!(&self);
 		}
 		js_o = jack_sync_rx.recv() => {
 		    if let Some(jack_sync_msg) = js_o {
@@ -166,7 +165,6 @@ impl AudioSequence {
 				jack_sync_msg.pos_frame
 			    ) {
 				for tup in data {
-				    dbg!(tup);
 				    audio_out.send(tup);
 				}
 			    }
@@ -174,6 +172,9 @@ impl AudioSequence {
 			    if let Ok(tup) = audio_in.recv() {
 				self.process_record(tup);
 			    }
+			}
+			if jack_sync_msg.beat_this_cycle {
+			    self.observe_beat(jack_sync_msg.beat);
 			}
 		    }
 		}
@@ -288,7 +289,7 @@ impl AudioSequence {
 		    ret.push((*l, *r));
 
 		} 
-	    } 
+	    }
 
 	    if self.playhead == 0 {
 		println!("reset playhead worked");

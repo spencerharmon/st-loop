@@ -138,7 +138,7 @@ impl TrackAudioCombiner {
         channels: &mut TrackAudioChannels,
 	state: &mut TrackAudioState,
     ) {
-	if state.playing {
+//	if state.playing {
 	    let mut buf = Vec::new();
 	    let mut first = true;
 
@@ -179,11 +179,12 @@ impl TrackAudioCombiner {
 		    }
 		}
 		for tup in buf.iter() {
+//		    dbg!(tup);
 		    channels_ref.output.send(*tup);
 		}
 
 	    }
-	}
+//	}
     }
 }
 
