@@ -3,6 +3,7 @@
 mod jackio;
 mod dispatcher;
 mod track_audio;
+mod audio_in_switch;
 mod jack_sync_fanout;
 mod command_manager;
 mod scene;

@@ -9,6 +9,7 @@ use crate::yaml_config::*;
 use crate::track_audio::*;
 use crate::jack_sync_fanout::*;
 use crate::track_audio::*;
+use crate::audio_in_switch::*;
 use crate::jackio::*;
 use st_lib::owned_midi::*;
 use std::rc::Rc;
@@ -23,7 +24,6 @@ use tokio::task;
 use tokio::sync::mpsc;
 
 pub struct Dispatcher {
-    audio_in_vec: Vec<Receiver<(f32, f32)>>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
     midi_out_vec: Vec<OwnedMidi>,
     nsm: nsm::Client
@@ -31,7 +31,6 @@ pub struct Dispatcher {
 
 impl Dispatcher {
     pub fn new (
-        audio_in_vec: Vec<Receiver<(f32, f32)>>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
         midi_out_vec: Vec<OwnedMidi>,
     ) -> Dispatcher {
@@ -39,7 +38,6 @@ impl Dispatcher {
 	let nsm = nsm::Client::new();
 
 	Dispatcher {
-            audio_in_vec,
             midi_in_vec, 
             midi_out_vec,
 	    nsm
@@ -52,9 +50,10 @@ impl Dispatcher {
 	jack_command_tx: mpsc::Sender<JackioCommand>,
 	jack_client_addr: usize,
         command_midi_rx: mpsc::Receiver<OwnedMidi>,
+        audio_in_vec: Vec<Receiver<(f32, f32)>>,
     ) {
 	//make sequences
-	let mut audio_sequences = Vec::<Sequence>::new();
+	let mut audio_sequences = Vec::<AudioSequence>::new();
 //	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
 	
 	//make scenes
@@ -67,7 +66,16 @@ impl Dispatcher {
 	}
 	
 	let mut jsfc = JackSyncFanoutCommander::new(tick_rx, jack_client_addr);
-	let mut track_combiners = Vec::new();
+	//dispatcher's jsf
+	let (jsf_tx, mut jsf_rx) = mpsc::channel(1);
+	jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: jsf_tx }).await;
+	
+	let (ais_jsf_tx, mut ais_jsf_rx) = mpsc::channel(1);
+	let mut audio_in_switch_commander = AudioInSwitchCommander::new(
+	    audio_in_vec,
+	    ais_jsf_rx
+	);
+
 	
 	let (command_req_tx, mut command_req_rx) = mpsc::channel(100);
 	let (command_reply_tx, mut command_reply_rx) = mpsc::channel(100);
@@ -78,23 +86,20 @@ impl Dispatcher {
 	    command_reply_tx
 	);
 
-	let (jsf_tx, mut jsf_rx) = mpsc::channel(1);
-	jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: jsf_tx }).await;
 
+	let mut track_combiners = Vec::new();
 	for i in 0..AUDIO_TRACK_COUNT {
 	    let (tx, rx) = mpsc::channel(1);
 	    jsfc = jsfc.send_command(JackSyncFanoutCommand::NewRecipient{ sender: tx }).await;
 	    let t = TrackAudioCombinerCommander::new(audio_out_vec.pop().unwrap(), rx);
 	    //todo remove me
-
-
 //	    let t = t.send_command(TrackAudioCommand::Play).await;
 
 	    track_combiners.push(t);
-	    
 //	    jack_command_tx.send(JackioCommand::StartPlaying{track: i}).await;
 
 	}
+	
 	let mut scene = 1;
 	let mut path: String = "~/.config/st-tools/st-loop/".to_string(); 
 
@@ -102,13 +107,21 @@ impl Dispatcher {
 	let playing_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
 	let newest_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
 
-
+	let mut sync_message_received = false;
+	let mut framerate = 0;
+	let mut beats_per_bar = 0;
+	let mut last_frame = 0;
 	loop {
+	    //todo: this await should not be in the sync path. Spawn this into a thread and sleep for ASYNC_COMMAND_LATENCY 
 	    command_req_tx.send(CommandManagerRequest::Async).await;
 	    let mut commands = Vec::new();
 	    tokio::select!{
 		jsf_msg_o = jsf_rx.recv() => {
 		    if let Some(jsf_msg) = jsf_msg_o {
+			sync_message_received = true;
+			framerate = jsf_msg.framerate;
+			beats_per_bar = jsf_msg.beats_per_bar;
+			last_frame = jsf_msg.pos_frame;
 			if jsf_msg.beat_this_cycle && jsf_msg.beat == 1 {
 			    println!("cool!");
 			    command_req_tx.send(CommandManagerRequest::BarBoundary).await;
@@ -128,8 +141,49 @@ impl Dispatcher {
 			    CommandManagerMessage::Undo => {
 			    },
 			    CommandManagerMessage::Go { tracks: t, scenes: s } => {
+				if !sync_message_received {
+				    return
+				}
+				
 				//create new sequences
+				for track in t {
 
+				    let (j_tx, mut j_rx) = mpsc::channel(1);
+
+				    jsfc = jsfc.send_command(
+					JackSyncFanoutCommand::NewRecipient{ sender: j_tx }
+				    ).await;
+
+				    let (in_tx, in_rx) = unbounded();
+
+				    audio_in_switch_commander = audio_in_switch_commander.send_command(
+					AudioInCommand::RerouteTrack {
+					    track: *track,
+					    recipient: in_tx
+					}
+				    ).await;
+				    
+				    let (out_tx, out_rx) = unbounded();
+				    let mut combiner = track_combiners
+					.get_mut(*track)
+					.unwrap();
+
+				    let _ = combiner.send_command(
+					    TrackAudioCommand::NewSeq {
+						channel: out_rx
+					    }
+				    ).await;
+				    
+				    let new_seq_commander = AudioSequenceCommander::new(
+					*track,
+					beats_per_bar,
+					last_frame,
+					framerate,
+					j_rx,
+					in_rx,
+					out_tx
+				    );
+				}
 			    },
 			    CommandManagerMessage::Start { scene: scene_id } => {
 				let scene = scenes.get(*scene_id).unwrap();

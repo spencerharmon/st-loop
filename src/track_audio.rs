@@ -55,7 +55,7 @@ impl TrackAudioCombinerCommander {
 
         TrackAudioCombinerCommander { tx }
     }
-    pub async fn send_command(self, command: TrackAudioCommand) -> TrackAudioCombinerCommander {
+    pub async fn send_command(&self, command: TrackAudioCommand) -> &TrackAudioCombinerCommander {
         self.tx.send(command).await;
 	self
     }

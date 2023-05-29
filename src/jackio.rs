@@ -61,7 +61,6 @@ impl JackIO {
 	    jack::Port<jack::AudioOut>,
 	    jack::Port<jack::AudioOut>)>::new();
 
-
 	let ref_audio_in_ports = RefCell::new(audio_in_jack_ports);
 	let ref_audio_out_ports = RefCell::new(audio_out_jack_ports);
 	let ref_audio_in_rx_channels = RefCell::new(audio_in_rx_channels);
@@ -242,7 +241,6 @@ impl JackIO {
 	let audio_in_rx_channels = ref_audio_in_rx_channels.borrow_mut().to_vec();
 	let audio_out_tx_channels = ref_audio_out_tx_channels.borrow_mut().to_vec();
 	let mut dispatcher = Dispatcher::new(
-	    audio_in_rx_channels,
 	    midi_rx_channels,
 	    midi_tx_channels,
 	);
@@ -252,6 +250,7 @@ impl JackIO {
 	    jack_command_tx,
 	    client_pointer.expose_addr(),
 	    command_midi_rx,
+	    audio_in_rx_channels,
 	).await;
     }//start
 }

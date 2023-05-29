@@ -1,5 +1,3 @@
-use crate::sequence::Sequence;
-
 #[derive(Clone)]
 pub struct Scene{
     pub sequences: Vec<usize>

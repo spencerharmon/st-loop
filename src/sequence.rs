@@ -2,12 +2,64 @@ use std::fs::File;
 use std::time::{SystemTime, UNIX_EPOCH};
 use rubato::{FftFixedIn, Resampler};
 use std::cell::RefCell;
+use crossbeam_channel::*;
+use tokio::sync::mpsc;
+use crate::jack_sync_fanout::*;
 
-pub enum Sequence {
-    AudioSequence,
+pub enum SequenceCommand {
+    StartRecord,
+    StopRecord,
+    Play,
+    Stop,
+    Save { path: String },
+    Load { path: String }
+}
+
+pub struct AudioSequenceCommander {
+    tx: mpsc::Sender<SequenceCommand>
+}
+
+impl AudioSequenceCommander {
+    pub fn new(
+	track: usize,
+	beats_per_bar: usize,
+	last_frame: usize,
+	framerate: usize,
+	jack_sync_rx: mpsc::Receiver<JackSyncFanoutMessage>,
+	audio_in: Receiver<(f32, f32)>,
+	audio_out: Sender<(f32, f32)>
+    ) -> AudioSequenceCommander {
+	let (tx, mut rx) = mpsc::channel(1);
+
+	let mut seq = AudioSequence::new(
+	    track,
+	    beats_per_bar,
+	    last_frame,
+	    framerate
+	);
+
+	tokio::spawn(async move {
+	    seq.start(
+		rx,
+		jack_sync_rx,
+		audio_in,
+		audio_out
+	    );
+	});
+	
+	AudioSequenceCommander {
+	    tx
+	}
+    }
+
+    async fn send_command(self, command: SequenceCommand) {
+	self.tx.send(command).await;
+    }
 }
 
 pub struct AudioSequence {
+    playing: bool,
+    pub recording: bool,
     pub track: usize,
     pub beats_per_bar: usize,
     pub left: Vec<f32>,
@@ -20,14 +72,19 @@ pub struct AudioSequence {
     pub n_beats: usize,
     pub recording_delay: bool,
     pub playing_delay: bool,
-    pub recording: bool,
     pub id: usize,
     pub filename: String,
     framerate: usize
 }
 
 impl AudioSequence {
-    pub fn new(track: usize, beats_per_bar: usize, last_frame: usize, framerate: usize) -> AudioSequence {
+    pub fn new(
+	track: usize,
+	beats_per_bar: usize,
+	last_frame: usize,
+	framerate: usize,
+    ) -> AudioSequence {
+	let playing = false;
 	let length = 0;
 	let left = Vec::new();
 	let right = Vec::new();
@@ -42,7 +99,9 @@ impl AudioSequence {
 	let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 	let filename = format!("{:?}-{:?}.wav", track, epoch);
 	
-	AudioSequence { track,
+	AudioSequence { playing,
+			recording,
+			track,
 			beats_per_bar,
 			left,
 			right,
@@ -54,10 +113,40 @@ impl AudioSequence {
 			n_beats,
 			recording_delay,
 			playing_delay,
-			recording,
 			id,
 			filename,
 			framerate
+	}
+    }
+    async fn start(
+	&mut self,
+	mut command_rx: mpsc::Receiver<SequenceCommand>,
+	mut jack_sync_rx: mpsc::Receiver<JackSyncFanoutMessage>,
+	audio_in: Receiver<(f32, f32)>,
+	audio_out: Sender<(f32, f32)>
+    ){
+	loop {
+	    tokio::select! {
+		cmd_o = command_rx.recv() => {
+		}
+		js_o = jack_sync_rx.recv() => {
+		    if let Some(jack_sync_msg) = js_o {
+			if self.playing {
+			    if let Some(data) = self.process_position(
+				jack_sync_msg.nframes,
+				jack_sync_msg.pos_frame
+			    ) {
+				for tup in data { 
+				    audio_out.send(tup);
+				}
+			    }
+			} else if self.recording {
+			    let tup = audio_in.recv().unwrap();
+			    self.process_record(tup);
+			}
+		    }
+		}
+	    }
 	}
     }
 
