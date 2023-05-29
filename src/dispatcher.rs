@@ -144,74 +144,74 @@ impl Dispatcher {
 			    CommandManagerMessage::Undo => {
 			    },
 			    CommandManagerMessage::Go { tracks: t, scenes: s } => {
-				if !sync_message_received {
-				    return
-				}
-				if t.len() == 0 && s.len() == 0 {
+				if sync_message_received {
+				    if t.len() == 0 && s.len() == 0 {
+					for seq_id in &recording_sequences {
+					    //stop recording and autoplay
+					    let seq = audio_sequences.get(*seq_id).unwrap();
+					    seq.send_command(SequenceCommand::StopRecord);
+					    seq.send_command(SequenceCommand::Play);
 
-				    for seq_id in &recording_sequences {
-					//stop recording and autoplay
-					let seq = audio_sequences.get(*seq_id).unwrap();
-					seq.send_command(SequenceCommand::StopRecord);
-					seq.send_command(SequenceCommand::Play);
+					    playing_sequences.push(*seq_id);
 
-					playing_sequences.push(*seq_id);
-
-					jack_command_tx.send(
-					    JackioCommand::StartPlaying{track: seq.track}
-					).await;
-					jack_command_tx.send(
-					    JackioCommand::StopRecording{track: seq.track}
-					).await;
-				    }
-				    recording_sequences.clear();
-				    return
-				}
-				
-				//create new sequences
-				for track in t {
-				    &recording_sequences.push(*track);
-				    &newest_sequences.push(*track);
-
-				    let (j_tx, mut j_rx) = mpsc::channel(1);
-
-				    jsfc = jsfc.send_command(
-					JackSyncFanoutCommand::NewRecipient{ sender: j_tx }
-				    ).await;
-
-				    let (in_tx, in_rx) = unbounded();
-
-				    audio_in_switch_commander = audio_in_switch_commander.send_command(
-					AudioInCommand::RerouteTrack {
-					    track: *track,
-					    recipient: in_tx
+					    jack_command_tx.send(
+						JackioCommand::StartPlaying{track: seq.track}
+					    ).await;
+					    jack_command_tx.send(
+						JackioCommand::StopRecording{track: seq.track}
+					    ).await;
 					}
-				    ).await;
-				    
-				    let (out_tx, out_rx) = unbounded();
-				    let mut combiner = track_combiners
-					.get_mut(*track)
-					.unwrap();
+					recording_sequences.clear();
+				    }
 
-				    let _ = combiner.send_command(
-					    TrackAudioCommand::NewSeq {
-						channel: out_rx
+				    //create new sequences
+				    for track in t {
+					let (j_tx, mut j_rx) = mpsc::channel(1);
+
+					jsfc = jsfc.send_command(
+					    JackSyncFanoutCommand::NewRecipient{ sender: j_tx }
+					).await;
+
+					let (in_tx, in_rx) = unbounded();
+
+					audio_in_switch_commander = audio_in_switch_commander.send_command(
+					    AudioInCommand::RerouteTrack {
+						track: *track,
+						recipient: in_tx
 					    }
-				    ).await;
-				    
-				    let new_seq_commander = AudioSequenceCommander::new(
-					*track,
-					beats_per_bar,
-					last_frame,
-					framerate,
-					j_rx,
-					in_rx,
-					out_tx
-				    );
-				    audio_sequences.push(new_seq_commander);
-				    jack_command_tx.send(
-					JackioCommand::StartRecording{track: *track}
-				    ).await;
+					).await;
+
+					let (out_tx, out_rx) = unbounded();
+					let mut combiner = track_combiners
+					    .get_mut(*track)
+					    .unwrap();
+
+					let _ = combiner.send_command(
+						TrackAudioCommand::NewSeq {
+						    channel: out_rx
+						}
+					).await;
+
+					let new_seq_commander = AudioSequenceCommander::new(
+					    *track,
+					    beats_per_bar,
+					    last_frame,
+					    framerate,
+					    j_rx,
+					    in_rx,
+					    out_tx
+					);
+					audio_sequences.push(new_seq_commander);
+
+					let seq_id = audio_sequences.len() - 1;
+					&recording_sequences.push(seq_id);
+					&newest_sequences.push(seq_id);
+
+					jack_command_tx.send(
+					    JackioCommand::StartRecording{track: *track}
+					).await;
+
+				    }
 				}
 			    }, //go 
 			    CommandManagerMessage::Start { scene: scene_id } => {

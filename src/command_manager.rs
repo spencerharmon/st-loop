@@ -72,12 +72,16 @@ impl CommandManager {
     ){
 	loop {
 	    tokio::select!{
-		midi = command_midi_rx.recv() => {
-		    self.process_midi(midi.unwrap());
+		midi_o = command_midi_rx.recv() => {
+		    if let Some(midi) = midi_o {
+			self.process_midi(midi);
+		    }
 		}
-		req = req_rx.recv() => {
-		    if let Some(msg) = self.process_request(req.unwrap()){
-			reply_tx.send(msg).await;
+		req_o = req_rx.recv() => {
+		    if let Some(req) = req_o {
+			if let Some(msg) = self.process_request(req){
+			    reply_tx.send(msg).await;
+			}
 		    }
 		}
 	    }
