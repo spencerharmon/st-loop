@@ -16,7 +16,8 @@ pub enum SequenceCommand {
 }
 
 pub struct AudioSequenceCommander {
-    tx: mpsc::Sender<SequenceCommand>
+    tx: mpsc::Sender<SequenceCommand>,
+    pub track: usize
 }
 
 impl AudioSequenceCommander {
@@ -48,7 +49,8 @@ impl AudioSequenceCommander {
 	});
 	
 	AudioSequenceCommander {
-	    tx
+	    tx,
+	    track
 	}
     }
 

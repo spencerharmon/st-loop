@@ -156,8 +156,16 @@ impl Dispatcher {
 					seq.send_command(SequenceCommand::Play);
 
 					playing_sequences.push(*seq_id);
+
+					jack_command_tx.send(
+					    JackioCommand::StartPlaying{track: seq.track}
+					).await;
+					jack_command_tx.send(
+					    JackioCommand::StopRecording{track: seq.track}
+					).await;
 				    }
 				    recording_sequences.clear();
+				    return
 				}
 				
 				//create new sequences
@@ -201,8 +209,11 @@ impl Dispatcher {
 					out_tx
 				    );
 				    audio_sequences.push(new_seq_commander);
+				    jack_command_tx.send(
+					JackioCommand::StartRecording{track: *track}
+				    ).await;
 				}
-			    },
+			    }, //go 
 			    CommandManagerMessage::Start { scene: scene_id } => {
 				let scene = scenes.get(*scene_id).unwrap();
 				for seq_id in &scene.sequences {
