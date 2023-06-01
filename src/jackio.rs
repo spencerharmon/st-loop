@@ -174,6 +174,7 @@ impl JackIO {
 			    let mut in_l = jack_l.as_slice(ps);
 			    let mut in_r = jack_r.as_slice(ps);
 
+			    
 			    for i in 0..in_l.len() {
 				// receive input from jack, send to looper via channel
 				if let Some(l_bytes) = in_l.get(i) {
@@ -183,6 +184,7 @@ impl JackIO {
 					    .send(
 						(*l_bytes, *r_bytes)
 					    );
+//					println!("jack");
 				    }
 				}
 			    }

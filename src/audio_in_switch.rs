@@ -87,10 +87,15 @@ impl AudioInSwitch {
 //	dbg!(&self.input_recipient_map);
 	for (input, recipient_o) in &self.input_recipient_map {
 	    if let Some(recipient) = recipient_o {
-		
-		let (l, r) = input.recv().unwrap();
+		loop {
+		    if input.is_empty() {
+			break
+		    }
+		    let (l, r) = input.recv().unwrap();
 //		dbg!(l);
-		recipient.send((l, r));
+		    recipient.send((l, r));
+//		    println!("switch");
+		}
 	    }
 	}
     }

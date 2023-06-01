@@ -139,6 +139,8 @@ impl AudioSequence {
 			    }
 			    SequenceCommand::StopRecord =>  {
 				println!("stop record");
+				dbg!(self.length);
+				dbg!(self.left.len());
 				self.recording = false;
 			    }
 			    SequenceCommand::Play =>  {
@@ -159,6 +161,9 @@ impl AudioSequence {
 		}
 		js_o = jack_sync_rx.recv() => {
 		    if let Some(jack_sync_msg) = js_o {
+			if jack_sync_msg.beat_this_cycle {
+			    self.observe_beat(jack_sync_msg.beat);
+			}
 			if self.playing {
 			    if let Some(data) = self.process_position(
 				jack_sync_msg.nframes,
@@ -169,12 +174,13 @@ impl AudioSequence {
 				}
 			    }
 			} else if self.recording {
-			    if let Ok(tup) = audio_in.recv() {
-				self.process_record(tup);
+			    loop {
+				if audio_in.is_empty() {
+				    break
+				}
+				self.process_record(audio_in.recv().unwrap());
+//				println!("seq");
 			    }
-			}
-			if jack_sync_msg.beat_this_cycle {
-			    self.observe_beat(jack_sync_msg.beat);
 			}
 		    }
 		}
