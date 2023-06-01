@@ -55,14 +55,11 @@ impl Dispatcher {
     ) {
 	//make sequences
 	let mut audio_sequences = Vec::<AudioSequenceCommander>::new();
-//	let audio_sequences = Rc::new(RefCell::new(Vec::new()));
 	
 	//make scenes
-//	let scenes = Rc::new(RefCell::new(Vec::new()));
 	let mut scenes = Vec::new();
 	// plus 1 because the 0th scene is special empty scene
 	for i in 0..SCENE_COUNT + 1 {
-	    //	    scenes.borrow_mut().push(Scene{ sequences: Vec::new() });
 	    &scenes.push(Scene{ sequences: Vec::new() });
 	}
 	
@@ -97,19 +94,11 @@ impl Dispatcher {
 		let t = TrackAudioCombinerCommander::new(chan, rx);
 		track_combiners.push(t);
 	    }
-	    //todo remove me
-//	    let t = t.send_command(TrackAudioCommand::Play).await;
-
-//	    jack_command_tx.send(JackioCommand::StartPlaying{track: i}).await;
-
 	}
 	
 	let mut current_scene = 1;
 	let mut path: String = "~/.config/st-tools/st-loop/".to_string(); 
 
-//	let recording_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
-//	let playing_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
-//	let newest_sequences = Rc::new(RefCell::new(Vec::<usize>::new()));
 	let mut recording_sequences = Vec::<usize>::new();
 	let mut playing_sequences = Vec::<usize>::new();
 	let mut newest_sequences = Vec::<usize>::new();

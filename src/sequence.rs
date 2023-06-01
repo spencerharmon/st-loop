@@ -179,7 +179,6 @@ impl AudioSequence {
 				    break
 				}
 				self.process_record(audio_in.recv().unwrap());
-//				println!("seq");
 			    }
 			}
 		    }
@@ -244,7 +243,6 @@ impl AudioSequence {
 	// 1 beat wiggle room after bar start
 	if self.n_beats % self.beats_per_bar == 0 {
 	    self.beat_counter = 1;
-	    //	    self.playhead = self.cycles_since_beat;
 	    self.playhead = self.cycles_since_beat;
 	    for _ in 0..self.cycles_since_beat {
 		self.left.pop();
@@ -273,15 +271,8 @@ impl AudioSequence {
 	    return None
 	}
 	if pos_frame == self.last_frame {
-//	    println!("yep");
 	    return None
 	}
-//	if self.beat_counter == self.n_beats {
-//	    if self.playing_delay {
-//		println!("playing delay off-----------------");
-//		self.playing_delay = false;
-//	    }
-//	}
 	if self.playing_delay {
 	    return None
 	}
@@ -423,14 +414,12 @@ impl AudioSequence {
 		hound::SampleFormat::Float => {
 		    for s in reader.samples::<f32>() {
 			let sample = s.unwrap();
-//			println!("{:?}", sample);
 			data.push(sample);
 		    }
 		},
 		hound::SampleFormat::Int => {
 		    for s in reader.samples::<i32>() {
 			let sample = (s.unwrap() as f32) / 2.0_f32.powf(bitness.into());
-//			println!("{:?}", sample);
 			data.push(sample);
 		    }
 		}

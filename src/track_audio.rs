@@ -6,17 +6,6 @@ use std::sync::Mutex;
 use std::sync::Arc;
 use crate::jack_sync_fanout::*;
 
-//todo remove me
-pub fn sine_wave_generator(freq: &f32, length: usize, sample_rate: u16) -> Vec<f32> {
-    let mut ret = vec![0f32; length.into()];
-    let samples_per_period =  sample_rate / *freq as u16;
-    for i in 0..length {
-        ret[i as usize] = (2f32 * std::f32::consts::PI * i as f32 / samples_per_period as f32).sin();
-
-    }
-	ret
-}
-
 pub enum TrackAudioCommand {
     NewSeq { channel: Receiver<(f32, f32)> },
     DelLastSeq,
@@ -138,53 +127,40 @@ impl TrackAudioCombiner {
         channels: &mut TrackAudioChannels,
 	state: &mut TrackAudioState,
     ) {
-//	if state.playing {
-	    let mut buf = Vec::new();
-	    let mut first = true;
+	let mut buf = Vec::new();
+	let mut first = true;
 
-	    let n = state.sequences.len();
-    	    let channels = RefCell::new(channels);
+	let n = state.sequences.len();
+	let channels = RefCell::new(channels);
 
-    	    //todo remove me
-//	    let n = 1;
-//    	    let mut wave = sine_wave_generator(&440f32, 128, 48000);
-	    for i in 0..n {
-		/*
-		//todo remove me
-		for _ in 0..128 {
-		    let x = wave.pop().unwrap();
-		    buf.push((x, x));
-    	    }
-		*/
-		let mut channels_ref = channels.borrow_mut();
-		if let Some(mut seq) = state.sequences.get(i) {
-		    if first {
-			loop {
-			    if let Ok(v) = seq.try_recv() {
-				buf.push(v);
-			    } else {
-				break
-			    }
-			}
-			    first = false;
-		    } else {
+	for i in 0..n {
+	    let mut channels_ref = channels.borrow_mut();
+	    if let Some(mut seq) = state.sequences.get(i) {
+		if first {
+		    loop {
 			if let Ok(v) = seq.try_recv() {
-			    for i in 0..buf.len() {
-				if let Some(tup) = buf.get_mut(i) {
-				    tup.0 = tup.0 + v.0;
-				    tup.1 = tup.1 + v.1;
-				}
+			    buf.push(v);
+			} else {
+			    break
+			}
+		    }
+			first = false;
+		} else {
+		    if let Ok(v) = seq.try_recv() {
+			for i in 0..buf.len() {
+			    if let Some(tup) = buf.get_mut(i) {
+				tup.0 = tup.0 + v.0;
+				tup.1 = tup.1 + v.1;
 			    }
 			}
 		    }
 		}
-		for tup in buf.iter() {
-//		    dbg!(tup);
-		    channels_ref.output.send(*tup);
-		}
-
 	    }
-//	}
+	    for tup in buf.iter() {
+		channels_ref.output.send(*tup);
+	    }
+
+	}
     }
 }
 

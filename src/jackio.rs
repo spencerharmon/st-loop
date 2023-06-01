@@ -28,17 +28,7 @@ impl JackIO {
     pub async fn start(self)  {
 
         let (jack_command_tx, mut jack_command_rx) = mpsc::channel(100);
-	/*
-
-	//signals jack callback to start and stop sending data from a track
-        let (start_recording_tx, start_recording_rx) = bounded(100);
-        let (stop_recording_tx, stop_recording_rx) = bounded(100);
-
-	//same, but for playing tracks
-        let (start_playing_tx, start_playing_rx) = bounded(100);
-        let (stop_playing_tx, stop_playing_rx) = bounded(100);
-
-	*/
+	
 	//used by CommandManager
 	let (command_midi_tx, mut command_midi_rx) = mpsc::channel(100);
 
@@ -168,7 +158,7 @@ impl JackIO {
 		    //record/in
 		    if let Some(b) = recording.get(t) {
 			if *b {
-			    // jack input; split tuple
+			    // jack input
 			    let (jack_l, jack_r) = b_audio_in_ports.get(t).unwrap();
 		    
 			    let mut in_l = jack_l.as_slice(ps);
@@ -176,7 +166,7 @@ impl JackIO {
 
 			    
 			    for i in 0..in_l.len() {
-				// receive input from jack, send to looper via channel
+				// receive input from jack, send to switch via channel
 				if let Some(l_bytes) = in_l.get(i) {
 				    if let Some(r_bytes) = in_r.get(i) {
 					b_audio_in_tx_channels.get(t)
@@ -184,7 +174,6 @@ impl JackIO {
 					    .send(
 						(*l_bytes, *r_bytes)
 					    );
-//					println!("jack");
 				    }
 				}
 			    }
@@ -219,7 +208,6 @@ impl JackIO {
 				}
 				match out_rx.try_recv() {
 				    Ok(out_tup) => {
-//					dbg!(&out_tup);
     					*l_sample = out_tup.0;
 					*r_sample = out_tup.1;
 				    }
