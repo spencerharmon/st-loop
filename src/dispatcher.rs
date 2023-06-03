@@ -218,6 +218,13 @@ impl Dispatcher {
 			    CommandManagerMessage::Start { scene: scene_id } => {
 				current_scene = *scene_id;
 				let scene = scenes.get(*scene_id).unwrap();
+				for seq_id in &playing_sequences {
+				    let seq = audio_sequences.get(*seq_id).unwrap();
+				    seq.send_command(SequenceCommand::Stop).await;
+    				    jack_command_tx.send(
+    					JackioCommand::StopPlaying{track: seq.track}
+				    ).await;				    
+				}
 				for seq_id in &scene.sequences {
 				    let seq = audio_sequences.get(*seq_id).unwrap();
     				    seq.send_command(SequenceCommand::Play).await;

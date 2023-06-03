@@ -109,6 +109,11 @@ impl JackIO {
 	for _ in 0..AUDIO_TRACK_COUNT {
 	    playing.push(false);
 	}
+	let mut stopping: Vec<bool> = Vec::new();
+	for _ in 0..AUDIO_TRACK_COUNT {
+	    stopping.push(false);
+	}
+	
 	let process = jack::ClosureProcessHandler::new(
             move |client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
 		let mut b_audio_in_ports = ref_audio_in_ports.borrow_mut();
@@ -130,6 +135,10 @@ impl JackIO {
 				if let Some(b) = playing.get_mut(track) {
 				    *b = false;
 				}
+				if let Some(b) = stopping.get_mut(track) {
+				    *b = true;
+				}
+				
 			    }
 			    JackioCommand::StartRecording { track } => {
 				if let Some(b) = recording.get_mut(track) {
@@ -222,6 +231,24 @@ impl JackIO {
 
     		    }//play/out
 
+		    //send 0 on stopped tracks
+		    if let Some(b) = stopping.get(t) {
+			if *b {
+			    let (ref mut out_l, ref mut out_r) =
+				b_audio_out_ports
+				.get_mut(t)
+				.unwrap();
+
+			    let out_len = out_l.as_mut_slice(ps).len();
+
+			    for i in 0..out_len {
+				let l_sample = out_l.as_mut_slice(ps).get_mut(i).unwrap();
+				let r_sample = out_r.as_mut_slice(ps).get_mut(i).unwrap();
+				*l_sample = 0.0;
+				*r_sample = 0.0;
+			    }
+			}
+		    }//stopping
     		}//for t in 0..AUDIO_TRACK_COUNT
     		    
             jack::Control::Continue
