@@ -77,6 +77,8 @@ impl Dispatcher {
 
 	
 	let (command_req_tx, mut command_req_rx) = mpsc::channel(100);
+	let non_sync_command_channel = command_req_tx.clone();
+	let bar_boundary_command_channel = command_req_tx.clone();
 	let (command_reply_tx, mut command_reply_rx) = mpsc::channel(100);
 	let command_manager = CommandManager::new();
 	command_manager.start(
@@ -107,9 +109,12 @@ impl Dispatcher {
 	let mut framerate = 0;
 	let mut beats_per_bar = 0;
 	let mut last_frame = 0;
+
+	tokio::task::spawn(async move {
+	    non_sync_command_channel.send(CommandManagerRequest::Async).await;
+	    tokio::time::sleep(time::Duration::from_millis(ASYNC_COMMAND_LATENCY)).await;	    
+	});
 	loop {
-	    //todo: this await should not be in the sync path. Spawn this into a thread and sleep for ASYNC_COMMAND_LATENCY 
-	    command_req_tx.send(CommandManagerRequest::Async).await;
 	    let mut commands = Vec::new();
 	    tokio::select!{
 		jsf_msg_o = jsf_rx.recv() => {
@@ -119,8 +124,7 @@ impl Dispatcher {
 			beats_per_bar = jsf_msg.beats_per_bar;
 			last_frame = jsf_msg.pos_frame;
 			if jsf_msg.beat_this_cycle && jsf_msg.beat == 1 {
-			    println!("cool!");
-			    command_req_tx.send(CommandManagerRequest::BarBoundary).await;
+			    bar_boundary_command_channel.send(CommandManagerRequest::BarBoundary).await;
 			}
 		    }
 		}

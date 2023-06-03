@@ -81,6 +81,7 @@ impl JackSyncFanout {
 	let sync = st_sync::client::Client::new();
 	let mut next_beat_frame = 0;
 	loop {
+	    //first beat frame
 	    if let Ok(frame) = sync.try_recv_next_beat_frame() {
 		dbg!(frame);
 		next_beat_frame = frame as usize;
