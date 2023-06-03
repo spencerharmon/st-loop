@@ -150,6 +150,7 @@ impl AudioSequence {
 			    SequenceCommand::Stop => {
 				println!("stopping");
 				self.playing = false;
+				self.reset_playhead();
 			    }
 			    SequenceCommand::Save { path } => {
 			    }
@@ -161,10 +162,11 @@ impl AudioSequence {
 		}
 		js_o = jack_sync_rx.recv() => {
 		    if let Some(jack_sync_msg) = js_o {
-			if jack_sync_msg.beat_this_cycle {
-			    self.observe_beat(jack_sync_msg.beat);
-			}
 			if self.playing {
+			    if jack_sync_msg.beat_this_cycle {
+				self.observe_beat(jack_sync_msg.beat);
+			    }
+			    
 			    if let Some(data) = self.process_position(
 				jack_sync_msg.nframes,
 				jack_sync_msg.pos_frame
@@ -174,6 +176,10 @@ impl AudioSequence {
 				}
 			    }
 			} else if self.recording {
+			    if jack_sync_msg.beat_this_cycle {
+				self.observe_beat(jack_sync_msg.beat);
+			    }
+			    
 			    loop {
 				if audio_in.is_empty() {
 				    break
@@ -295,6 +301,9 @@ impl AudioSequence {
 	}
 
 	self.last_frame = pos_frame;
+	if ret.len() == 0 {
+	    return None
+	}
 	Some(ret)
     }
     pub fn save(&self, path: &String) {

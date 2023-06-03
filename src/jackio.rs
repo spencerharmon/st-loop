@@ -232,7 +232,7 @@ impl JackIO {
     		    }//play/out
 
 		    //send 0 on stopped tracks
-		    if let Some(b) = stopping.get(t) {
+		    if let Some(b) = stopping.get_mut(t) {
 			if *b {
 			    let (ref mut out_l, ref mut out_r) =
 				b_audio_out_ports
@@ -247,6 +247,7 @@ impl JackIO {
 				*l_sample = 0.0;
 				*r_sample = 0.0;
 			    }
+			    *b = false;
 			}
 		    }//stopping
     		}//for t in 0..AUDIO_TRACK_COUNT

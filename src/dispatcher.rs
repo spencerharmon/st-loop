@@ -212,6 +212,12 @@ impl Dispatcher {
 					jack_command_tx.send(
 					    JackioCommand::StartRecording{track: *track}
 					).await;
+
+					//add sequence to scenes
+					for scene_id in s {
+					    let scene = scenes.get_mut(*scene_id).unwrap();
+					    scene.sequences.push(seq_id);
+					}
 				    }
 				}
 			    }, //go 
@@ -225,12 +231,14 @@ impl Dispatcher {
     					JackioCommand::StopPlaying{track: seq.track}
 				    ).await;				    
 				}
+				playing_sequences.clear();
 				for seq_id in &scene.sequences {
 				    let seq = audio_sequences.get(*seq_id).unwrap();
     				    seq.send_command(SequenceCommand::Play).await;
     				    jack_command_tx.send(
     					JackioCommand::StartPlaying{track: seq.track}
 				    ).await;
+				    playing_sequences.push(*seq_id);
 				}
 			    }
 			}
