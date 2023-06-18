@@ -123,6 +123,9 @@ impl JackIO {
 
 		tick_tx.try_send(());
 
+		//todo delete me
+		let mut once = true;
+		
 		loop {
 		    if let Ok(command) = jack_command_rx.try_recv() {
 			match command {
@@ -192,6 +195,7 @@ impl JackIO {
 		    //play/out
 		    if let Some(b) = playing.get(t) {
 			if *b {
+//			    println!("jack");
 			    let (ref mut out_l, ref mut out_r) =
 				b_audio_out_ports
 				.get_mut(t)
@@ -206,6 +210,10 @@ impl JackIO {
 
 			    let out_len = out_l.as_mut_slice(ps).len();
 
+			    if once {
+//				dbg!(out_len);
+				once = false;
+			    }
 			    for i in 0..out_len {
 				let l_sample = out_l.as_mut_slice(ps).get_mut(i).unwrap();
 				let r_sample = out_r.as_mut_slice(ps).get_mut(i).unwrap();

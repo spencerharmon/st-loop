@@ -111,8 +111,10 @@ impl Dispatcher {
 	let mut last_frame = 0;
 
 	tokio::task::spawn(async move {
-	    non_sync_command_channel.send(CommandManagerRequest::Async).await;
-	    tokio::time::sleep(time::Duration::from_millis(ASYNC_COMMAND_LATENCY)).await;	    
+	    loop {
+		non_sync_command_channel.send(CommandManagerRequest::Async).await;
+		tokio::time::sleep(time::Duration::from_millis(ASYNC_COMMAND_LATENCY)).await;
+	    }
 	});
 	loop {
 	    let mut commands = Vec::new();
@@ -137,8 +139,37 @@ impl Dispatcher {
 		    for c in &commands {
 			match c {
 			    CommandManagerMessage::Stop => {
+				for id in &playing_sequences {
+				    if let Some(seq) = audio_sequences.get(*id) {
+					seq.send_command(SequenceCommand::Stop).await;
+    					jack_command_tx.send(
+					    JackioCommand::StopPlaying{track: seq.track}
+    					).await;
+				    }
+				}
 			    },
 			    CommandManagerMessage::Undo => {
+				for id in &newest_sequences {
+				    if let Some(seq) = audio_sequences.get(*id) {
+					seq.send_command(SequenceCommand::Shutdown).await;
+					let c = track_combiners.get(seq.track).unwrap();
+					c.send_command(TrackAudioCommand::DelLastSeq).await;
+					audio_sequences.remove(*id);
+				    }
+				    for scene_id in 0..scenes.len() {
+					let mut scene = scenes.get_mut(scene_id).unwrap();
+					for i in 0..scene.sequences.len() {
+					    let sid = scene.sequences.get(i).unwrap();
+					    if sid == id {
+						&scene.sequences.remove(i);
+					    }
+					}
+				    }
+				}
+				
+				playing_sequences.clear();
+				newest_sequences.clear();
+				recording_sequences.clear();
 			    },
 			    CommandManagerMessage::Go { tracks: t, scenes: s } => {
 				if sync_message_received {
@@ -147,13 +178,13 @@ impl Dispatcher {
 					    dbg!(seq_id);
 					    //stop recording and autoplay
 					    let seq = audio_sequences.get(*seq_id).unwrap();
-					    seq.send_command(SequenceCommand::StopRecord).await;
 					    jack_command_tx.send(
 						JackioCommand::StopRecording{track: seq.track}
 					    ).await;
 					    
 					    seq.send_command(SequenceCommand::Play).await;
-
+					    seq.send_command(SequenceCommand::StopRecord).await;
+					    
 					    playing_sequences.push(*seq_id);
 
 					    
@@ -229,7 +260,7 @@ impl Dispatcher {
 				    seq.send_command(SequenceCommand::Stop).await;
     				    jack_command_tx.send(
     					JackioCommand::StopPlaying{track: seq.track}
-				    ).await;				    
+    				    ).await;
 				}
 				playing_sequences.clear();
 				for seq_id in &scene.sequences {

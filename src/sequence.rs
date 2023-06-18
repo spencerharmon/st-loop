@@ -12,7 +12,8 @@ pub enum SequenceCommand {
     Play,
     Stop,
     Save { path: String },
-    Load { path: String }
+    Load { path: String },
+    Shutdown
 }
 
 pub struct AudioSequenceCommander {
@@ -74,10 +75,9 @@ pub struct AudioSequence {
     pub beat_counter: usize,
     pub n_beats: usize,
     pub recording_delay: bool,
-    pub playing_delay: bool,
     pub id: usize,
     pub filename: String,
-    framerate: usize
+    framerate: usize,
 }
 
 impl AudioSequence {
@@ -96,7 +96,6 @@ impl AudioSequence {
 	let beat_counter = 1;
 	let n_beats = 0;
 	let recording_delay = true;
-	let playing_delay = false;
 	let recording = true;
 	let id = 0;
 	let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -115,10 +114,9 @@ impl AudioSequence {
 			beat_counter,
 			n_beats,
 			recording_delay,
-			playing_delay,
 			id,
 			filename,
-			framerate
+			framerate,
 	}
     }
     async fn start(
@@ -139,13 +137,11 @@ impl AudioSequence {
 			    }
 			    SequenceCommand::StopRecord =>  {
 				println!("stop record");
-				dbg!(self.length);
-				dbg!(self.left.len());
-				self.recording = false;
+				self.stop_recording();
 			    }
 			    SequenceCommand::Play =>  {
 				println!("playing");
-				self.playing = true;
+				self.start_playing();
 			    }
 			    SequenceCommand::Stop => {
 				println!("stopping");
@@ -156,7 +152,10 @@ impl AudioSequence {
 			    }
 			    SequenceCommand::Load { path } => {
 			    }
-			    
+			    SequenceCommand::Shutdown => {
+				println!("shutdown");
+				break
+			    }
 			}
 		    }
 		}
@@ -191,6 +190,7 @@ impl AudioSequence {
 		}
 	    }
 	}
+	println!("end of sequence loop");
     }
 
     pub fn set_id(&mut self, id: usize) {
@@ -215,7 +215,6 @@ impl AudioSequence {
     pub fn reset_playhead(&mut self) {
 	self.playhead = 0;
 	self.beat_counter = 1;
-	self.playing_delay = false;
     }
     
     pub fn observe_beat(&mut self, beat: usize) {
@@ -254,8 +253,6 @@ impl AudioSequence {
 		self.left.pop();
 		self.right.pop();
 	    }
-	    //stop record goes after start play so we can override playing delay.
-	    self.playing_delay = false;
 	} else {
 	    self.beat_counter = self.n_beats + 1;
 	    self.n_beats = (self.n_beats - (self.n_beats % self.beats_per_bar)) + self.beats_per_bar;
@@ -264,9 +261,9 @@ impl AudioSequence {
 	self.recording = false;
 	println!("stop recording. Beat length: {}", self.n_beats);
     }
-    pub fn start_playing(&mut self, frame: usize) {
-	self.last_frame = frame;
-	self.playing_delay = true;
+    
+    pub fn start_playing(&mut self) {
+	self.playing = true;
     }
     
     pub fn process_position(&mut self,
@@ -279,13 +276,11 @@ impl AudioSequence {
 	if pos_frame == self.last_frame {
 	    return None
 	}
-	if self.playing_delay {
-	    return None
-	}
 
 	let mut ret = Vec::new();
 
-	for i in 1..nframes + 1 {
+	//nframes is output buffer len * 2 (for some reason)
+	for _ in 0..nframes/2 {
 	    if let Some(l) = self.left.get(self.playhead) {
 
 		if let Some(r) = self.right.get(self.playhead) {
@@ -302,7 +297,7 @@ impl AudioSequence {
 
 	self.last_frame = pos_frame;
 	if ret.len() == 0 {
-	    return None
+	    return None;
 	}
 	Some(ret)
     }

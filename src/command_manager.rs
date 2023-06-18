@@ -93,8 +93,8 @@ impl CommandManager {
 	req: CommandManagerRequest
     ) -> Option<Vec<CommandManagerMessage>>{
 	let mut ret = Vec::new();
-	if let req = CommandManagerRequest::BarBoundary {
-	    
+	match req {
+	    CommandManagerRequest::BarBoundary => {
 		if self.go {
 		    let tracks = self.rec_tracks_idx.to_vec();
 		    let scenes = self.rec_scenes_idx.to_vec();
@@ -117,13 +117,17 @@ impl CommandManager {
 		    );
 		    self.trigger_scene = false;
 		}
+	    }
+	    _ => {/*"async" commands performed for either request type*/}
 	}
-	//command is otherwise CommandManagerRequest::Async
+	//command is CommandManagerRequest::Async
 	if self.stop {
 	    ret.push(CommandManagerMessage::Stop);
+	    self.stop = false;
 	}
 	if self.undo {
 	    ret.push(CommandManagerMessage::Undo);
+	    self.undo = false;
 	}
 
 	if ret.len() == 0 {

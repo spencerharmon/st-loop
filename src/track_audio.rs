@@ -75,6 +75,7 @@ fn process_command(
 	    state.sequences.push(channel);
 	}
 	TrackAudioCommand::DelLastSeq => {
+	    println!("DelLastSeq");
 	    state.sequences.pop();
 	}
 	TrackAudioCommand::Play => {
@@ -138,13 +139,18 @@ impl TrackAudioCombiner {
 	    if let Some(mut seq) = state.sequences.get(i) {
 		if first {
 		    loop {
-			if let Ok(v) = seq.try_recv() {
-			    buf.push(v);
-			} else {
-			    break
+			match seq.try_recv() {
+			    Ok(v) => {
+				buf.push(v);
+			    }
+			    Err(_) => {
+				break
+			    }
 			}
 		    }
+		    if buf.len() > 0 {
 			first = false;
+		    }
 		} else {
 		    if let Ok(v) = seq.try_recv() {
 			for i in 0..buf.len() {
@@ -159,7 +165,6 @@ impl TrackAudioCombiner {
 	    for tup in buf.iter() {
 		channels_ref.output.send(*tup);
 	    }
-
 	}
     }
 }
