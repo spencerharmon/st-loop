@@ -47,14 +47,8 @@ impl JackSyncFanoutCommander {
 	    tx: command_tx
 	}
     }
-    pub async fn send_command(self, command: JackSyncFanoutCommand) -> JackSyncFanoutCommander {
+    pub async fn send_command(&self, command: JackSyncFanoutCommand) {
 	self.tx.send(command).await;
-	self
-    }
-    
-    pub fn try_send_command(self, command: JackSyncFanoutCommand) -> JackSyncFanoutCommander {
-	self.tx.try_send(command);
-	self
     }
 }
 
@@ -99,20 +93,16 @@ impl JackSyncFanout {
 	mut command_rx: Receiver<JackSyncFanoutCommand>,
 	mut channels: JackSyncFanoutChannels
     ) {
-//	let channels_rw = RwLock::new(channels);
-//        let mut channels_lock = channels_rw.write().await;
 	loop {
 	    tokio::select! {
 		command = command_rx.recv() => {
 		    if let Some(c) = command {
 			self.process_command(c, &mut channels);
 
-//			thread::sleep(time::Duration::from_millis(10));
 		    }
 		}
 		_ = channels.tick.recv() => {
 		    self.fanout_process(&mut channels);
-//		    thread::sleep(time::Duration::from_millis(1));
 		}
 	    }
 	}

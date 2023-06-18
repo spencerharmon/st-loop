@@ -32,9 +32,8 @@ impl AudioInSwitchCommander {
 	    tx
 	}
     }
-    pub async fn send_command(self, command: AudioInCommand) -> AudioInSwitchCommander{
+    pub async fn send_command(&self, command: AudioInCommand) {
 	self.tx.send(command).await;
-	self
     }
 }
 

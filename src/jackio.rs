@@ -271,14 +271,14 @@ impl JackIO {
 	let mut dispatcher = Dispatcher::new(
 	    midi_rx_channels,
 	    midi_tx_channels,
-	);
-	dispatcher.start(
+	    client_pointer.expose_addr(),
 	    tick_rx,
 	    audio_out_tx_channels,
-	    jack_command_tx,
-	    client_pointer.expose_addr(),
-	    command_midi_rx,
 	    audio_in_rx_channels,
+	).await;
+	dispatcher.start(
+	    jack_command_tx,
+	    command_midi_rx,
 	).await;
     }//start
 }
