@@ -12,7 +12,7 @@ pub enum SequenceCommand {
     Play,
     Stop,
     Save { path: String },
-    Load { path: String },
+    Load { path: String, beats: usize },
     Shutdown
 }
 
@@ -149,8 +149,10 @@ impl AudioSequence {
 				self.reset_playhead();
 			    }
 			    SequenceCommand::Save { path } => {
+				self.save(path);
 			    }
-			    SequenceCommand::Load { path } => {
+			    SequenceCommand::Load { path, beats } => {
+				self.load(path, beats);
 			    }
 			    SequenceCommand::Shutdown => {
 				println!("shutdown");
@@ -301,7 +303,7 @@ impl AudioSequence {
 	}
 	Some(ret)
     }
-    pub fn save(&self, path: &String) {
+    pub fn save(&self, path: String) {
 	println!("sequence save {}", path);
 	let full_path = format!("{}/{}", path, self.filename);
 	if let Ok(_) = File::open(&full_path) {
@@ -323,9 +325,11 @@ impl AudioSequence {
 	}
 
     }
-    pub fn load(&mut self, file: String) {
+    pub fn load(&mut self, file: String, beats: usize) {
 	println!("load {}", file);
-	let mut reader = hound::WavReader::open(file).unwrap();
+	self.filename = file;
+	self.n_beats = beats;
+	let mut reader = hound::WavReader::open(&self.filename).unwrap();
 
 	println!("file spec: {:?}", reader.spec());
 	let bitness = reader.spec().bits_per_sample;

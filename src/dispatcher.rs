@@ -23,11 +23,15 @@ use std::{thread, time};
 use tokio::task;
 use tokio::sync::mpsc;
 use std::collections::VecDeque;
+use std::collections::HashMap;
 
 pub struct Dispatcher {
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
     midi_out_vec: Vec<OwnedMidi>,
-    nsm: nsm::Client
+    nsm: nsm::Client,
+    path: Option<String>,
+    audio_sequences: Vec<AudioSequenceCommander>,
+    scenes: Vec<Scene>
 }
 
 impl Dispatcher {
@@ -37,15 +41,26 @@ impl Dispatcher {
     ) -> Dispatcher {
 	//nsm client
 	let nsm = nsm::Client::new();
+	let mut path: Option<String> = None;
+	let mut audio_sequences = Vec::<AudioSequenceCommander>::new();
 
+	//make scenes
+	let mut scenes = Vec::new();
+	// plus 1 because the 0th scene is special empty scene
+	for i in 0..SCENE_COUNT + 1 {
+	    &scenes.push(Scene{ sequences: Vec::new() });
+	}
 	Dispatcher {
             midi_in_vec, 
             midi_out_vec,
-	    nsm
+	    nsm,
+	    path,
+	    audio_sequences,
+	    scenes,
 	}
     }
     pub async fn start(
-	mut self,
+	&mut self,
 	tick_rx: mpsc::Receiver<()>,
         mut audio_out: VecDeque<Sender<(f32, f32)>>,
 	jack_command_tx: mpsc::Sender<JackioCommand>,
@@ -54,14 +69,7 @@ impl Dispatcher {
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
     ) {
 	//make sequences
-	let mut audio_sequences = Vec::<AudioSequenceCommander>::new();
 	
-	//make scenes
-	let mut scenes = Vec::new();
-	// plus 1 because the 0th scene is special empty scene
-	for i in 0..SCENE_COUNT + 1 {
-	    &scenes.push(Scene{ sequences: Vec::new() });
-	}
 	
 	let mut jsfc = JackSyncFanoutCommander::new(tick_rx, jack_client_addr);
 	//dispatcher's jsf
@@ -97,9 +105,8 @@ impl Dispatcher {
 		track_combiners.push(t);
 	    }
 	}
-	
+
 	let mut current_scene = 1;
-	let mut path: String = "~/.config/st-tools/st-loop/".to_string(); 
 
 	let mut recording_sequences = Vec::<usize>::new();
 	let mut playing_sequences = Vec::<usize>::new();
@@ -111,6 +118,8 @@ impl Dispatcher {
 	let mut last_frame = 0;
 
 	tokio::task::spawn(async move {
+	    //todo we don't need this. command manager should send async command messages as soon as the midi message is received.
+	    // this additional message passing wastes cpu cycles for no reason.
 	    loop {
 		non_sync_command_channel.send(CommandManagerRequest::Async).await;
 		tokio::time::sleep(time::Duration::from_millis(ASYNC_COMMAND_LATENCY)).await;
@@ -131,6 +140,26 @@ impl Dispatcher {
 		    }
 		}
 
+		Some(nsmc_message) = self.nsm.rx.recv() => {
+		    match nsmc_message {
+			nsm::NSMClientMessage::Save => {
+			    match &self.path {
+				Some(p) => {
+				    //send save messages to stuff
+				    self.process_save_request();
+				}
+				None => {
+				    println!("No path configured. Check NSM server.");
+				}
+			    }
+			}
+			nsm::NSMClientMessage::Open { path: p } => {
+			    self.path = Some(p);
+			    //read the config
+			    self.process_load_request();
+			}
+		    }
+		}
 		opt = command_reply_rx.recv() => {
 		    if let Some(c) = opt {
 			commands = c;
@@ -140,7 +169,7 @@ impl Dispatcher {
 			match c {
 			    CommandManagerMessage::Stop => {
 				for id in &playing_sequences {
-				    if let Some(seq) = audio_sequences.get(*id) {
+				    if let Some(seq) = self.audio_sequences.get(*id) {
 					seq.send_command(SequenceCommand::Stop).await;
     					jack_command_tx.send(
 					    JackioCommand::StopPlaying{track: seq.track}
@@ -150,14 +179,14 @@ impl Dispatcher {
 			    },
 			    CommandManagerMessage::Undo => {
 				for id in &newest_sequences {
-				    if let Some(seq) = audio_sequences.get(*id) {
+				    if let Some(seq) = self.audio_sequences.get(*id) {
 					seq.send_command(SequenceCommand::Shutdown).await;
 					let c = track_combiners.get(seq.track).unwrap();
 					c.send_command(TrackAudioCommand::DelLastSeq).await;
-					audio_sequences.remove(*id);
+					self.audio_sequences.remove(*id);
 				    }
-				    for scene_id in 0..scenes.len() {
-					let mut scene = scenes.get_mut(scene_id).unwrap();
+				    for scene_id in 0..self.scenes.len() {
+					let mut scene = self.scenes.get_mut(scene_id).unwrap();
 					for i in 0..scene.sequences.len() {
 					    let sid = scene.sequences.get(i).unwrap();
 					    if sid == id {
@@ -177,7 +206,7 @@ impl Dispatcher {
 					for seq_id in &recording_sequences {
 					    dbg!(seq_id);
 					    //stop recording and autoplay
-					    let seq = audio_sequences.get(*seq_id).unwrap();
+					    let seq = self.audio_sequences.get(*seq_id).unwrap();
 					    jack_command_tx.send(
 						JackioCommand::StopRecording{track: seq.track}
 					    ).await;
@@ -232,9 +261,9 @@ impl Dispatcher {
 					    in_rx,
 					    out_tx
 					);
-					audio_sequences.push(new_seq_commander);
+					self.audio_sequences.push(new_seq_commander);
 
-					let seq_id = audio_sequences.len() - 1;
+					let seq_id = self.audio_sequences.len() - 1;
     					dbg!(seq_id);
     					&recording_sequences.push(seq_id);
 					&newest_sequences.push(seq_id);
@@ -246,7 +275,7 @@ impl Dispatcher {
 
 					//add sequence to scenes
 					for scene_id in s {
-					    let scene = scenes.get_mut(*scene_id).unwrap();
+					    let scene = self.scenes.get_mut(*scene_id).unwrap();
 					    scene.sequences.push(seq_id);
 					}
 				    }
@@ -254,9 +283,9 @@ impl Dispatcher {
 			    }, //go 
 			    CommandManagerMessage::Start { scene: scene_id } => {
 				current_scene = *scene_id;
-				let scene = scenes.get(*scene_id).unwrap();
+				let scene = self.scenes.get(*scene_id).unwrap();
 				for seq_id in &playing_sequences {
-				    let seq = audio_sequences.get(*seq_id).unwrap();
+				    let seq = self.audio_sequences.get(*seq_id).unwrap();
 				    seq.send_command(SequenceCommand::Stop).await;
     				    jack_command_tx.send(
     					JackioCommand::StopPlaying{track: seq.track}
@@ -264,7 +293,7 @@ impl Dispatcher {
 				}
 				playing_sequences.clear();
 				for seq_id in &scene.sequences {
-				    let seq = audio_sequences.get(*seq_id).unwrap();
+				    let seq = self.audio_sequences.get(*seq_id).unwrap();
     				    seq.send_command(SequenceCommand::Play).await;
     				    jack_command_tx.send(
     					JackioCommand::StartPlaying{track: seq.track}
@@ -278,4 +307,49 @@ impl Dispatcher {
 	    }//tokio::select
 	}//loop
     }//start()
- }
+    fn process_save_request(&self) {
+	for seq in &self.audio_sequences {
+	    if let Some(p) = &self.path {
+		seq.send_command(SequenceCommand::Save { path: p.to_string() });
+	    }
+	}
+    }
+    fn process_load_request(&mut self) {
+
+	let mut sequence_names = HashMap::new();
+	let mut name_idx: usize = 0;
+	if let Some(path) = &self.path {
+	    let config_yaml = format!("{}/config.yaml", path);
+	    if let Ok(config) = File::open(config_yaml) {
+		let config_data: YamlConfig = serde_yaml::from_reader(config).unwrap();
+		for item in config_data.sequences {
+			//todo actually make the sequence commander
+    //		    let mut new_seq = AudioSequence::new(item.track, beats_per_bar, last_frame, framerate);
+			let p = format!("{}/{}", path, item.filename);
+
+		    sequence_names.insert(p, name_idx);
+		    name_idx = name_idx + 1;
+			/* todo send the load command via the new sequence commander
+			seq.send_command(SequenceCommand::Load {
+			    path: item.filename,
+			    beats: item.beats
+		    });
+			*/
+		}
+
+		for (i, seq_names) in config_data.scenes {
+		    let mut seq_ids = Vec::new();
+		    for name in seq_names {
+			for idx in 0..self.audio_sequences.len() {
+    			    seq_ids.push(*sequence_names.get(&name).unwrap());
+			}
+		    }
+		    self.scenes[i] = Scene { sequences: seq_ids };
+		}
+	    }
+
+	} else {
+	    println!("No path configured. Check NSM server");
+	}
+    }//process_load_request
+}
