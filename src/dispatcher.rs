@@ -164,6 +164,7 @@ impl Dispatcher {
 			}
 			if load_request_ready {
 			    self.process_load_request().await;
+			    load_request_ready = false;
 			}
 		    }
 		}
@@ -182,13 +183,8 @@ impl Dispatcher {
 			    }
 			}
 			nsm::NSMClientMessage::Open { path: p } => {
-
 			    self.path = Some(p);
-			    if sync_message_received {
-				self.process_load_request().await;
-			    } else {
-				load_request_ready = true;
-			    }
+			    load_request_ready = true;
 			}
 		    }
 		}
