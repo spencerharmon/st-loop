@@ -269,6 +269,7 @@ impl JackIO {
 	let audio_in_rx_channels = ref_audio_in_rx_channels.borrow_mut().to_vec();
 	let audio_out_tx_channels = ref_audio_out_tx_channels.borrow_mut().clone();
 	let mut dispatcher = Dispatcher::new(
+	    jack_command_tx,
 	    midi_rx_channels,
 	    midi_tx_channels,
 	    client_pointer.expose_addr(),
@@ -277,7 +278,6 @@ impl JackIO {
 	    audio_in_rx_channels,
 	).await;
 	dispatcher.start(
-	    jack_command_tx,
 	    command_midi_rx,
 	).await;
     }//start

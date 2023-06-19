@@ -22,10 +22,12 @@ use std::io::prelude::*;
 use std::{thread, time};
 use tokio::task;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use std::collections::VecDeque;
 use std::collections::HashMap;
 
 pub struct Dispatcher {
+    jack_command_tx: mpsc::Sender<JackioCommand>,
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
     midi_out_vec: Vec<OwnedMidi>,
     nsm: nsm::Client,
@@ -38,11 +40,16 @@ pub struct Dispatcher {
     framerate: usize,
     beats_per_bar: usize,
     last_frame: usize,
+    current_scene: usize,
+    recording_sequences: Vec<usize>,
+    playing_sequences: Vec<usize>,
+    newest_sequences: Vec<usize>,
     jsf_rx: mpsc::Receiver<JackSyncFanoutMessage>
 }
 
 impl Dispatcher {
     pub async fn new (
+	jack_command_tx: mpsc::Sender<JackioCommand>,
         midi_in_vec: Vec<Receiver<OwnedMidi>>,
         midi_out_vec: Vec<OwnedMidi>,
 	jack_client_addr: usize,
@@ -87,8 +94,14 @@ impl Dispatcher {
 	let mut framerate = 0;
 	let mut beats_per_bar = 0;
 	let mut last_frame = 0;
+	let mut current_scene = 1;
 	
+	let mut recording_sequences = Vec::<usize>::new();
+	let mut playing_sequences = Vec::<usize>::new();
+	let mut newest_sequences = Vec::<usize>::new();
+
 	Dispatcher {
+	    jack_command_tx,
             midi_in_vec, 
             midi_out_vec,
 	    nsm,
@@ -101,12 +114,15 @@ impl Dispatcher {
 	    framerate,
 	    beats_per_bar,
 	    last_frame,
+	    current_scene,
+	    recording_sequences,
+	    playing_sequences,
+	    newest_sequences,
 	    jsf_rx
 	}
     }
     pub async fn start(
 	&mut self,
-	jack_command_tx: mpsc::Sender<JackioCommand>,
         command_midi_rx: mpsc::Receiver<OwnedMidi>,
     ) {
 
@@ -124,14 +140,10 @@ impl Dispatcher {
 
 
 
-	let mut current_scene = 1;
-
-	let mut recording_sequences = Vec::<usize>::new();
-	let mut playing_sequences = Vec::<usize>::new();
-	let mut newest_sequences = Vec::<usize>::new();
 
 	let mut sync_message_received = false;
-
+	let mut load_request_ready = false;
+	
 	tokio::task::spawn(async move {
 	    //todo we don't need this. command manager should send async command messages as soon as the midi message is received.
 	    // this additional message passing wastes cpu cycles for no reason.
@@ -152,6 +164,9 @@ impl Dispatcher {
 			if jsf_msg.beat_this_cycle && jsf_msg.beat == 1 {
 			    bar_boundary_command_channel.send(CommandManagerRequest::BarBoundary).await;
 			}
+			if load_request_ready {
+			    self.process_load_request().await;
+			}
 		    }
 		}
 
@@ -161,7 +176,7 @@ impl Dispatcher {
 			    match &self.path {
 				Some(p) => {
 				    //send save messages to stuff
-				    self.process_save_request();
+				    self.process_save_request().await;
 				}
 				None => {
 				    println!("No path configured. Check NSM server.");
@@ -169,9 +184,13 @@ impl Dispatcher {
 			    }
 			}
 			nsm::NSMClientMessage::Open { path: p } => {
+
 			    self.path = Some(p);
-			    //read the config
-			    self.process_load_request();
+			    if sync_message_received {
+				self.process_load_request().await;
+			    } else {
+				load_request_ready = true;
+			    }
 			}
 		    }
 		}
@@ -183,17 +202,17 @@ impl Dispatcher {
 		    for c in &commands {
 			match c {
 			    CommandManagerMessage::Stop => {
-				for id in &playing_sequences {
+				for id in &self.playing_sequences {
 				    if let Some(seq) = self.audio_sequences.get(*id) {
 					seq.send_command(SequenceCommand::Stop).await;
-    					jack_command_tx.send(
+    					self.jack_command_tx.send(
 					    JackioCommand::StopPlaying{track: seq.track}
     					).await;
 				    }
 				}
 			    },
 			    CommandManagerMessage::Undo => {
-				for id in &newest_sequences {
+				for id in &self.newest_sequences {
 				    if let Some(seq) = self.audio_sequences.get(*id) {
 					seq.send_command(SequenceCommand::Shutdown).await;
 					let c = self.track_combiners.get(seq.track).unwrap();
@@ -211,32 +230,32 @@ impl Dispatcher {
 				    }
 				}
 				
-				playing_sequences.clear();
-				newest_sequences.clear();
-				recording_sequences.clear();
+				self.playing_sequences.clear();
+				self.newest_sequences.clear();
+				self.recording_sequences.clear();
 			    },
 			    CommandManagerMessage::Go { tracks: t, scenes: s } => {
 				if sync_message_received {
 				    if t.len() == 0 && s.len() == 0 {
-					for seq_id in &recording_sequences {
+					for seq_id in &self.recording_sequences {
 					    dbg!(seq_id);
 					    //stop recording and autoplay
 					    let seq = self.audio_sequences.get(*seq_id).unwrap();
-					    jack_command_tx.send(
+					    self.jack_command_tx.send(
 						JackioCommand::StopRecording{track: seq.track}
 					    ).await;
 					    
 					    seq.send_command(SequenceCommand::Play).await;
 					    seq.send_command(SequenceCommand::StopRecord).await;
 					    
-					    playing_sequences.push(*seq_id);
+					    self.playing_sequences.push(*seq_id);
 
 					    
-					    jack_command_tx.send(
+					    self.jack_command_tx.send(
 						JackioCommand::StartPlaying{track: seq.track}
 					    ).await;
 					}
-					recording_sequences.clear();
+					self.recording_sequences.clear();
 				    }
 
 				    //create new sequences
@@ -244,12 +263,16 @@ impl Dispatcher {
 					self.new_audio_sequence(*track).await;
 
 					let seq_id = self.audio_sequences.len() - 1;
+					self.audio_sequences
+					    .get(seq_id)
+					    .unwrap()
+					    .send_command(SequenceCommand::StartRecord);
     					dbg!(seq_id);
-    					&recording_sequences.push(seq_id);
-					&newest_sequences.push(seq_id);
+    					&self.recording_sequences.push(seq_id);
+					&self.newest_sequences.push(seq_id);
 
 
-					jack_command_tx.send(
+					self.jack_command_tx.send(
 					    JackioCommand::StartRecording{track: *track}
 					).await;
 
@@ -262,24 +285,7 @@ impl Dispatcher {
 				}
 			    }, //go 
 			    CommandManagerMessage::Start { scene: scene_id } => {
-				current_scene = *scene_id;
-				let scene = self.scenes.get(*scene_id).unwrap();
-				for seq_id in &playing_sequences {
-				    let seq = self.audio_sequences.get(*seq_id).unwrap();
-				    seq.send_command(SequenceCommand::Stop).await;
-    				    jack_command_tx.send(
-    					JackioCommand::StopPlaying{track: seq.track}
-    				    ).await;
-				}
-				playing_sequences.clear();
-				for seq_id in &scene.sequences {
-				    let seq = self.audio_sequences.get(*seq_id).unwrap();
-    				    seq.send_command(SequenceCommand::Play).await;
-    				    jack_command_tx.send(
-    					JackioCommand::StartPlaying{track: seq.track}
-				    ).await;
-				    playing_sequences.push(*seq_id);
-				}
+				self.start_scene(*scene_id).await;
 			    }
 			}
 		    }
@@ -287,46 +293,108 @@ impl Dispatcher {
 	    }//tokio::select
 	}//loop
     }//start()
-    fn process_save_request(&self) {
-	for seq in &self.audio_sequences {
-	    if let Some(p) = &self.path {
-		seq.send_command(SequenceCommand::Save { path: p.to_string() });
-	    }
+    async fn start_scene(&mut self, scene_id: usize) {
+	self.current_scene = scene_id;
+	let scene = self.scenes.get(scene_id).unwrap();
+	for seq_id in &self.playing_sequences {
+	    let seq = self.audio_sequences.get(*seq_id).unwrap();
+	    seq.send_command(SequenceCommand::Stop).await;
+	    self.jack_command_tx.send(
+		JackioCommand::StopPlaying{track: seq.track}
+	    ).await;
+	}
+	self.playing_sequences.clear();
+	for seq_id in &scene.sequences {
+	    let seq = self.audio_sequences.get(*seq_id).unwrap();
+	    seq.send_command(SequenceCommand::Play).await;
+	    self.jack_command_tx.send(
+		JackioCommand::StartPlaying{track: seq.track}
+	    ).await;
+	    println!("starting sequence {} track {}", seq_id, seq.track);
+	    self.playing_sequences.push(*seq_id);
 	}
     }
-    fn process_load_request(&mut self) {
+    
+    async fn process_save_request(&mut self) {
+
+	if let Some(p) = &self.path {
+	    create_dir(p.to_string());
+	let mut seq_maps = Vec::new();
+	for seq in self.audio_sequences.iter_mut() {
+		seq.send_command(SequenceCommand::Save { path: p.to_string() }).await;
+	    seq.send_command(SequenceCommand::GetMeta).await;
+
+	    match &seq.recv_reply().await {
+		SequenceReply::Meta { track, beats, filename } => {
+		    let item = SeqMeta {
+			track: *track,
+			beats: *beats,
+			filename: (*filename.clone()).to_string()
+		    };
+		    seq_maps.push(item);
+		}
+		SequenceReply::Err { msg } => {
+		    println!("Sequence replied with error: {}", msg);
+		}
+	    }
+
+	}
+
+	let mut scene_map = BTreeMap::new();
+	for i in 0..(self.scenes.len() - 1) {
+	    let mut sequence_names = Vec::new();
+	    for idx in &self.scenes[i].sequences {
+		match &seq_maps[*idx] {
+		    SeqMeta { track, beats, filename } => {
+			sequence_names.push((*filename.clone()).to_string());
+		    }
+		    _ => {}
+		}
+	    }
+	    scene_map.insert(i, sequence_names);
+	}
+	
+	println!("save {}/config.yaml", p.to_string());
+	let mut config = File::create(format!("{}/config.yaml", p.to_string())).unwrap();
+
+	let out = YamlConfig { scenes: scene_map, sequences: seq_maps };
+	    config.write_all(serde_yaml::to_string(&out).unwrap().as_bytes());
+	}
+    }
+    async fn process_load_request(&mut self) {
 
 	let mut sequence_names = HashMap::new();
 	let mut name_idx: usize = 0;
-	if let Some(path) = &self.path {
+	if let Some(path) = self.path.clone() {
 	    let config_yaml = format!("{}/config.yaml", path);
 	    if let Ok(config) = File::open(config_yaml) {
 		let config_data: YamlConfig = serde_yaml::from_reader(config).unwrap();
 		for item in config_data.sequences {
-			//todo actually make the sequence commander
-    //		    let mut new_seq = AudioSequence::new(item.track, beats_per_bar, last_frame, framerate);
-			let p = format!("{}/{}", path, item.filename);
+		    let p = format!("{}/{}", path, item.filename);
+		    self.new_audio_sequence(item.track).await;
 
-		    sequence_names.insert(p, name_idx);
+		    sequence_names.insert(item.filename.clone().to_string(), name_idx);
 		    name_idx = name_idx + 1;
-			/* todo send the load command via the new sequence commander
+		    if let Some(seq) = self.audio_sequences.get(self.audio_sequences.len() - 1){
+			dbg!(&item);
 			seq.send_command(SequenceCommand::Load {
-			    path: item.filename,
+			    path: p,
 			    beats: item.beats
-		    });
-			*/
+			}).await;			
+		    }
 		}
 
 		for (i, seq_names) in config_data.scenes {
 		    let mut seq_ids = Vec::new();
+		    
 		    for name in seq_names {
-			for idx in 0..self.audio_sequences.len() {
-    			    seq_ids.push(*sequence_names.get(&name).unwrap());
-			}
+    			seq_ids.push(*sequence_names.get(&name).unwrap());
 		    }
 		    self.scenes[i] = Scene { sequences: seq_ids };
 		}
 	    }
+
+	    self.start_scene(self.current_scene).await;
 
 	} else {
 	    println!("No path configured. Check NSM server");
@@ -367,7 +435,6 @@ impl Dispatcher {
 	    j_rx,
 	    in_rx,
 	    out_tx
-
 	);
 	self.audio_sequences.push(new_seq_commander);
     }//new_audio_sequence

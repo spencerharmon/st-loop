@@ -13,12 +13,24 @@ pub enum SequenceCommand {
     Stop,
     Save { path: String },
     Load { path: String, beats: usize },
-    Shutdown
+    Shutdown,
+    GetMeta
+}
+
+pub enum SequenceReply {
+    Meta {
+	track: usize,
+	beats: usize,
+	filename: String
+    },
+    Err { msg: String }
 }
 
 pub struct AudioSequenceCommander {
     tx: mpsc::Sender<SequenceCommand>,
-    pub track: usize
+    rx: mpsc::Receiver<SequenceReply>,
+    pub track: usize,
+    
 }
 
 impl AudioSequenceCommander {
@@ -29,20 +41,22 @@ impl AudioSequenceCommander {
 	framerate: usize,
 	jack_sync_rx: mpsc::Receiver<JackSyncFanoutMessage>,
 	audio_in: Receiver<(f32, f32)>,
-	audio_out: Sender<(f32, f32)>
+	audio_out: Sender<(f32, f32)>,
     ) -> AudioSequenceCommander {
 	let (tx, mut rx) = mpsc::channel(1);
-
+	let (reply_tx, mut reply_rx) = mpsc::channel(1);
+	
 	let mut seq = AudioSequence::new(
 	    track,
 	    beats_per_bar,
 	    last_frame,
-	    framerate
+	    framerate,
 	);
 
 	tokio::spawn(async move {
 	    seq.start(
 		rx,
+		reply_tx,
 		jack_sync_rx,
 		audio_in,
 		audio_out
@@ -51,12 +65,17 @@ impl AudioSequenceCommander {
 	
 	AudioSequenceCommander {
 	    tx,
+	    rx: reply_rx,
 	    track
 	}
     }
 
     pub async fn send_command(&self, command: SequenceCommand) {
 	self.tx.send(command).await;
+    }
+    
+    pub async fn recv_reply(&mut self) -> SequenceReply {
+	return self.rx.recv().await.unwrap();
     }
 }
 
@@ -96,7 +115,7 @@ impl AudioSequence {
 	let beat_counter = 1;
 	let n_beats = 0;
 	let recording_delay = true;
-	let recording = true;
+	let recording = false;
 	let id = 0;
 	let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 	let filename = format!("{:?}-{:?}.wav", track, epoch);
@@ -122,6 +141,7 @@ impl AudioSequence {
     async fn start(
 	&mut self,
 	mut command_rx: mpsc::Receiver<SequenceCommand>,
+	mut reply_tx: mpsc::Sender<SequenceReply>,
 	mut jack_sync_rx: mpsc::Receiver<JackSyncFanoutMessage>,
 	audio_in: Receiver<(f32, f32)>,
 	audio_out: Sender<(f32, f32)>
@@ -152,7 +172,23 @@ impl AudioSequence {
 				self.save(path);
 			    }
 			    SequenceCommand::Load { path, beats } => {
+				dbg!(&beats);
 				self.load(path, beats);
+			    }
+			    SequenceCommand::GetMeta => {
+				if !self.recording {
+				    reply_tx.send(SequenceReply::Meta {
+					track: self.track,
+					beats: self.n_beats,
+					filename: (self.filename.clone()).to_string()
+				    }).await;
+				} else {
+				    reply_tx.send(SequenceReply::Err {
+					msg: "Cannot GetMeta while recording".to_string()
+				    }).await;
+				}
+				
+				
 			    }
 			    SequenceCommand::Shutdown => {
 				println!("shutdown");
@@ -329,6 +365,7 @@ impl AudioSequence {
 	println!("load {}", file);
 	self.filename = file;
 	self.n_beats = beats;
+	dbg!(&self.n_beats);
 	let mut reader = hound::WavReader::open(&self.filename).unwrap();
 
 	println!("file spec: {:?}", reader.spec());
@@ -435,6 +472,7 @@ impl AudioSequence {
 	    (self.left, self.right) = deinterleave(data);
 	}
 	self.recording = false;
+	self.start_playing();
     }
 }
 
