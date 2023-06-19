@@ -130,12 +130,11 @@ impl Dispatcher {
 	let (command_req_tx, mut command_req_rx) = mpsc::channel(100);
 	let non_sync_command_channel = command_req_tx.clone();
 	let bar_boundary_command_channel = command_req_tx.clone();
-	let (command_reply_tx, mut command_reply_rx) = mpsc::channel(100);
-	let command_manager = CommandManager::new();
+	let (command_manager_out_tx, mut command_manager_out_rx) = mpsc::channel(100);
+	let command_manager = CommandManager::new(command_manager_out_tx);
 	command_manager.start(
 	    command_midi_rx,
 	    command_req_rx,
-	    command_reply_tx
 	);
 
 
@@ -153,7 +152,6 @@ impl Dispatcher {
 	    }
 	});
 	loop {
-	    let mut commands = Vec::new();
 	    tokio::select!{
 		jsf_msg_o = self.jsf_rx.recv() => {
 		    if let Some(jsf_msg) = jsf_msg_o {
@@ -194,11 +192,7 @@ impl Dispatcher {
 			}
 		    }
 		}
-		opt = command_reply_rx.recv() => {
-		    if let Some(c) = opt {
-			commands = c;
-		    }
-
+		Some(commands) = command_manager_out_rx.recv() => {
 		    for c in &commands {
 			match c {
 			    CommandManagerMessage::Stop => {

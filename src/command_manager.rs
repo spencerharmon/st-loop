@@ -30,10 +30,11 @@ pub struct CommandManager {
     go: bool,
     trigger_scene: bool,
     undo: bool,
-    stop: bool
+    stop: bool,
+    out_tx: Sender<Vec<CommandManagerMessage>>
 }
 impl CommandManager {
-    pub fn new ()  -> CommandManager {
+    pub fn new (out_tx: Sender<Vec<CommandManagerMessage>>)  -> CommandManager {
 	let rec_tracks_idx = Vec::new();
 	let rec_scenes_idx = Vec::new();
 	let play_scene_idx = 0;
@@ -45,7 +46,8 @@ impl CommandManager {
 	    go: false,
 	    trigger_scene: false,
 	    undo: false,
-	    stop: false
+	    stop: false,
+	    out_tx
 	}
     }
 
@@ -53,13 +55,11 @@ impl CommandManager {
 	mut self,
 	mut command_midi_rx: Receiver<OwnedMidi>,
 	mut req_rx: Receiver<CommandManagerRequest>,
-	reply_tx: Sender<Vec<CommandManagerMessage>>
     ){
         tokio::task::spawn(async move {
 	    self.thread(
 		command_midi_rx,
 		req_rx,
-		reply_tx
 	    ).await;
 	});
     }
@@ -68,7 +68,6 @@ impl CommandManager {
 	&mut self,
 	mut command_midi_rx: Receiver<OwnedMidi>,
 	mut req_rx: Receiver<CommandManagerRequest>,
-	reply_tx: Sender<Vec<CommandManagerMessage>>
     ){
 	loop {
 	    tokio::select!{
@@ -80,7 +79,7 @@ impl CommandManager {
 		req_o = req_rx.recv() => {
 		    if let Some(req) = req_o {
 			if let Some(msg) = self.process_request(req){
-			    reply_tx.send(msg).await;
+			    self.out_tx.send(msg).await;
 			}
 		    }
 		}
