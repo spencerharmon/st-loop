@@ -220,9 +220,9 @@ impl Dispatcher {
 				    }
 				}
 				
-				self.playing_sequences.clear();
 				self.newest_sequences.clear();
 				self.recording_sequences.clear();
+				self.start_scene(self.current_scene);
 			    },
 			    CommandManagerMessage::Go { tracks: t, scenes: s } => {
 				if sync_message_received {
@@ -237,9 +237,13 @@ impl Dispatcher {
 					    
 					    seq.send_command(SequenceCommand::Play).await;
 					    seq.send_command(SequenceCommand::StopRecord).await;
-					    
-					    self.playing_sequences.push(*seq_id);
 
+					    self.track_combiners
+						.get(seq.track)
+						.unwrap()
+						.send_command(TrackAudioCommand::Play)
+						.await;
+					    self.playing_sequences.push(*seq_id);
 					    
 					    self.jack_command_tx.send(
 						JackioCommand::StartPlaying{track: seq.track}
@@ -256,7 +260,7 @@ impl Dispatcher {
 					self.audio_sequences
 					    .get(seq_id)
 					    .unwrap()
-					    .send_command(SequenceCommand::StartRecord);
+					    .send_command(SequenceCommand::StartRecord).await;
     					dbg!(seq_id);
     					&self.recording_sequences.push(seq_id);
 					&self.newest_sequences.push(seq_id);
@@ -292,6 +296,12 @@ impl Dispatcher {
 	    self.jack_command_tx.send(
 		JackioCommand::StopPlaying{track: seq.track}
 	    ).await;
+
+	    self.track_combiners
+		.get(seq.track)
+		.unwrap()
+		.send_command(TrackAudioCommand::Stop)
+		.await;	    
 	}
 	self.playing_sequences.clear();
 	for seq_id in &scene.sequences {
@@ -302,6 +312,11 @@ impl Dispatcher {
 	    ).await;
 	    println!("starting sequence {} track {}", seq_id, seq.track);
 	    self.playing_sequences.push(*seq_id);
+	    self.track_combiners
+		.get(seq.track)
+		.unwrap()
+		.send_command(TrackAudioCommand::Play)
+		.await;	    
 	}
     }
     
@@ -406,6 +421,7 @@ impl Dispatcher {
 	    }
 	).await;
 
+	//todo: scale channel size with frame size
 	let (out_tx, out_rx) = unbounded();
 	let mut combiner = self.track_combiners
 	    .get_mut(track)

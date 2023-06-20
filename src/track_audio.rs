@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use std::sync::Arc;
 use crate::jack_sync_fanout::*;
 
+#[derive(Debug)]
 pub enum TrackAudioCommand {
     NewSeq { channel: Receiver<(f32, f32)> },
     DelLastSeq,
@@ -28,18 +29,16 @@ impl TrackAudioCombinerCommander {
 	jack_tick: mpsc::Receiver<JackSyncFanoutMessage>
     ) -> TrackAudioCombinerCommander {
         let (tx, rx) = mpsc::channel(1);
-        let sequences = Vec::new();
-        let c = TrackAudioChannels {
-            jack_tick,
-            output
-        };
-	let s = TrackAudioState {
-	    playing: false,
-	    sequences
-	};
-        let t = TrackAudioCombiner::new();
+        let mut sequences = Vec::new();
+
+        let t = TrackAudioCombiner::new(
+	    sequences,
+	    jack_tick,
+	    output,
+	    rx
+	);
         tokio::task::spawn(async move {
-	    t.start(rx, c, s).await;
+	    t.start().await;
 	});
 
         TrackAudioCombinerCommander { tx }
@@ -55,115 +54,79 @@ impl TrackAudioCombinerCommander {
     }
 }
 
-struct TrackAudioChannels {
+
+struct TrackAudioCombiner {
+    sequences: Vec<Receiver<(f32, f32)>>,
+    playing: bool,
     jack_tick: mpsc::Receiver<JackSyncFanoutMessage>,
     output: Sender<(f32, f32)>,
+    command_rx: mpsc::Receiver<TrackAudioCommand>,
 }
-
-#[derive(Debug)]
-struct TrackAudioState {
-    sequences: Vec<Receiver<(f32, f32)>>,
-    playing: bool
-}
-
-fn process_command(
-    state: &mut TrackAudioState,
-    command: TrackAudioCommand
-) {
-    match command {
-	TrackAudioCommand::NewSeq { channel } => {
-	    state.sequences.push(channel);
-	}
-	TrackAudioCommand::DelLastSeq => {
-	    println!("DelLastSeq");
-	    state.sequences.pop();
-	}
-	TrackAudioCommand::Play => {
-	    state.playing = true;
-	}
-	TrackAudioCommand::Stop => {
-	    state.playing = false;
-	}
-    }
-    dbg!(&state);
-}
-
-struct TrackAudioCombiner {}
 
 impl TrackAudioCombiner {
-    pub fn new() -> TrackAudioCombiner {
-        TrackAudioCombiner { }
+    pub fn new(sequences: Vec<Receiver<(f32, f32)>>,
+	       jack_tick: mpsc::Receiver<JackSyncFanoutMessage>,
+	       output: Sender<(f32, f32)>,
+               command_rx: mpsc::Receiver<TrackAudioCommand>,
+    ) -> TrackAudioCombiner {
+	let mut playing = false;
+        TrackAudioCombiner { sequences, playing, jack_tick, output, command_rx }
     }
 
-    pub async fn start(
-        mut self,
-        mut command_rx: mpsc::Receiver<TrackAudioCommand>,
-        mut channels: TrackAudioChannels,
-	mut state: TrackAudioState
-    ) {
-
-	let state_arc = Arc::new(Mutex::new(state));
-
-    	let s_clone1 = state_arc.clone();
-    	let s_clone2 = state_arc.clone();
-
-
+    pub async fn start(mut self) {
 	loop {
 	    tokio::select! {
-		command = command_rx.recv() => {
+		command = self.command_rx.recv() => {
 		    if let Some(c) = command {
-			let mut s = s_clone1.lock().unwrap();
-			process_command(&mut s, c);
+			println!("processing command: {:?}", c);
+			self.process_command(c);
 		    }
 		}
-		_ = channels.jack_tick.recv() => {
-		    let mut s = s_clone2.lock().unwrap();
-		    self.process_sequence_data(&mut channels, &mut s);
+		Some(msg) = self.jack_tick.recv() => {
+		    self.process_sequence_data(msg.nframes/2);
 		}
 	    }
 	}
     }
-    fn process_sequence_data(
-        &self,
-        channels: &mut TrackAudioChannels,
-	state: &mut TrackAudioState,
-    ) {
-	let mut buf = Vec::new();
-	let mut first = true;
 
-	let n = state.sequences.len();
-	let channels = RefCell::new(channels);
-
-	for i in 0..n {
-	    let mut channels_ref = channels.borrow_mut();
-	    if let Some(mut seq) = state.sequences.get(i) {
-		if first {
-		    loop {
-			match seq.try_recv() {
-			    Ok(v) => {
-				buf.push(v);
-			    }
-			    Err(_) => {
-				break
-			    }
-			}
-		    }
-		    if buf.len() > 0 {
-			first = false;
-		    }
-		} else {
-		    if let Ok(v) = seq.try_recv() {
-			for i in 0..buf.len() {
-			    if let Some(tup) = buf.get_mut(i) {
-				tup.0 = tup.0 + v.0;
-				tup.1 = tup.1 + v.1;
-			    }
-			}
-		    }
+    fn process_sequence_data(&mut self, nframes: usize) {
+	let mut counter = 0;
+	loop {
+	    let mut tup = (0f32,0f32);
+	    let mut data = false;
+	    for seq in self.sequences.iter_mut() {
+		if let Ok(v) = seq.try_recv() {
+		    data = true;
+		    tup.0 = tup.0 + v.0;
+		    tup.1 = tup.1 + v.1;
 		}
 	    }
-	    for tup in buf.iter() {
-		channels_ref.output.send(*tup);
+	    if data {
+		self.output.send(tup);
+	    }
+	    counter = counter + 1;
+	    if counter >= nframes {
+		break
+	    }
+	}
+    }
+    fn process_command(
+	&mut self,
+	command: TrackAudioCommand
+    ) {
+	match command {
+	    TrackAudioCommand::NewSeq { channel } => {
+		self.sequences.push(channel);
+	    }
+	    TrackAudioCommand::DelLastSeq => {
+		println!("DelLastSeq");
+		self.sequences.pop();
+	    }
+	    TrackAudioCommand::Play => {
+		self.playing = true;
+	    }
+	    TrackAudioCommand::Stop => {
+		self.playing = false;
 	    }
 	}
     }

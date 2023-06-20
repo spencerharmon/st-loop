@@ -16,11 +16,20 @@ mod yaml_config;
 
 use tokio;
 
-#[tokio::main]
-async fn main() {
-    let io = jackio::JackIO::new();
-    io.start().await;
-    loop {
-      continue
-    }
+//#[tokio::main]
+fn main() {
+    console_subscriber::init();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+	    let io = jackio::JackIO::new();
+	    io.start().await;
+	    loop {
+		continue
+	    }
+        })
+
 }

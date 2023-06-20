@@ -209,7 +209,7 @@ impl AudioSequence {
 				jack_sync_msg.pos_frame
 			    ) {
 				for tup in data {
-				    audio_out.send(tup);
+				    audio_out.try_send(tup);
 				}
 			    }
 			} else if self.recording {
@@ -221,7 +221,7 @@ impl AudioSequence {
 				if audio_in.is_empty() {
 				    break
 				}
-				self.process_record(audio_in.recv().unwrap());
+				self.process_record(audio_in.try_recv().unwrap());
 			    }
 			}
 		    }
