@@ -125,8 +125,6 @@ impl Dispatcher {
 	&mut self,
         command_midi_rx: mpsc::Receiver<OwnedMidi>,
     ) {
-
-	
 	let (command_req_tx, mut command_req_rx) = mpsc::channel(100);
 	let non_sync_command_channel = command_req_tx.clone();
 	let bar_boundary_command_channel = command_req_tx.clone();
@@ -137,20 +135,9 @@ impl Dispatcher {
 	    command_req_rx,
 	);
 
-
-
-
 	let mut sync_message_received = false;
 	let mut load_request_ready = false;
 	
-	tokio::task::spawn(async move {
-	    //todo we don't need this. command manager should send async command messages as soon as the midi message is received.
-	    // this additional message passing wastes cpu cycles for no reason.
-	    loop {
-		non_sync_command_channel.send(CommandManagerRequest::Async).await;
-		tokio::time::sleep(time::Duration::from_millis(ASYNC_COMMAND_LATENCY)).await;
-	    }
-	});
 	loop {
 	    tokio::select!{
 		jsf_msg_o = self.jsf_rx.recv() => {

@@ -7,6 +7,7 @@ use wmidi;
 use crate::midi_control;
 use crate::constants::*;
 
+#[derive(Clone)]
 pub enum CommandManagerMessage {
     Go {
 	tracks: Vec<usize>,
@@ -18,8 +19,7 @@ pub enum CommandManagerMessage {
 }
 
 pub enum CommandManagerRequest {
-    BarBoundary,
-    Async
+    BarBoundary
 }
 
 #[derive(Debug)]
@@ -29,8 +29,6 @@ pub struct CommandManager {
     play_scene_idx: usize,
     go: bool,
     trigger_scene: bool,
-    undo: bool,
-    stop: bool,
     out_tx: Sender<Vec<CommandManagerMessage>>
 }
 impl CommandManager {
@@ -45,8 +43,6 @@ impl CommandManager {
 	    play_scene_idx,
 	    go: false,
 	    trigger_scene: false,
-	    undo: false,
-	    stop: false,
 	    out_tx
 	}
     }
@@ -73,7 +69,7 @@ impl CommandManager {
 	    tokio::select!{
 		midi_o = command_midi_rx.recv() => {
 		    if let Some(midi) = midi_o {
-			self.process_midi(midi);
+			self.process_midi(midi).await;
 		    }
 		}
 		req_o = req_rx.recv() => {
@@ -119,23 +115,13 @@ impl CommandManager {
 	    }
 	    _ => {/*"async" commands performed for either request type*/}
 	}
-	//command is CommandManagerRequest::Async
-	if self.stop {
-	    ret.push(CommandManagerMessage::Stop);
-	    self.stop = false;
-	}
-	if self.undo {
-	    ret.push(CommandManagerMessage::Undo);
-	    self.undo = false;
-	}
-
 	if ret.len() == 0 {
 	    return None
 	}
 	Some(ret)
     }
     
-    pub fn process_midi(&mut self, om: OwnedMidi){
+    async fn process_midi(&mut self, om: OwnedMidi){
 	println!("{:?}", wmidi::MidiMessage::from_bytes(&om.bytes));
 	if let Ok(m) = wmidi::MidiMessage::from_bytes(&om.bytes) {
 	    if m == midi_control::go() {
@@ -143,9 +129,9 @@ impl CommandManager {
 	    } else if m == midi_control::clear() {
 		self.clear();
 	    } else if m == midi_control::stop() {
-		self.stop();
+		self.stop().await;
 	    } else if m == midi_control::undo() {
-		self.undo();
+		self.undo().await;
 	    } else if m == midi_control::scene1() {
 		self.scene(1);
 	    } else if m == midi_control::scene2() {
@@ -212,19 +198,18 @@ impl CommandManager {
         for _ in 0..self.rec_scenes_idx.len() {
             self.rec_scenes_idx.pop();
         }
-        self.stop = false;
-        self.undo = false;
     }
     
-    fn stop(&mut self) {
+    async fn stop(&mut self) {
         println!("Stop");
-        self.stop = true;
         self.play_scene_idx = 0;
+	self.out_tx.send([CommandManagerMessage::Stop].to_vec()).await;
     }
     
-    pub fn undo(&mut self) {
+    async fn undo(&mut self) {
         println!("Undo");
-        self.undo = true;
+	
+	self.out_tx.send([CommandManagerMessage::Undo].to_vec()).await;
     }
     
     fn track(&mut self, n: usize){
