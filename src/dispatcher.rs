@@ -189,6 +189,7 @@ impl Dispatcher {
 				}
 			    },
 			    CommandManagerMessage::Undo => {
+				dbg!(&self.newest_sequences);
 				for id in &self.newest_sequences {
 				    if let Some(seq) = self.audio_sequences.get(*id) {
 					seq.send_command(SequenceCommand::Shutdown).await;
@@ -198,18 +199,15 @@ impl Dispatcher {
 				    }
 				    for scene_id in 0..self.scenes.len() {
 					let mut scene = self.scenes.get_mut(scene_id).unwrap();
-					for i in 0..scene.sequences.len() {
-					    let sid = scene.sequences.get(i).unwrap();
-					    if sid == id {
-						&scene.sequences.remove(i);
-					    }
-					}
+					scene.remove_sequence(*id);
+					dbg!(&scene.sequences);
 				    }
 				}
 				
 				self.newest_sequences.clear();
 				self.recording_sequences.clear();
-				self.start_scene(self.current_scene);
+				self.playing_sequences.clear();
+				self.start_scene(self.current_scene).await;
 			    },
 			    CommandManagerMessage::Go { tracks: t, scenes: s } => {
 				if sync_message_received {
@@ -250,6 +248,8 @@ impl Dispatcher {
 					    .send_command(SequenceCommand::StartRecord).await;
     					dbg!(seq_id);
     					&self.recording_sequences.push(seq_id);
+					
+					&self.newest_sequences.clear();
 					&self.newest_sequences.push(seq_id);
 
 
@@ -275,8 +275,11 @@ impl Dispatcher {
 	}//loop
     }//start()
     async fn start_scene(&mut self, scene_id: usize) {
+	println!("starting scene {}", scene_id);
 	self.current_scene = scene_id;
 	let scene = self.scenes.get(scene_id).unwrap();
+	dbg!(&self.playing_sequences);
+	//todo: don't stop sequences that are meant to keep playing.
 	for seq_id in &self.playing_sequences {
 	    let seq = self.audio_sequences.get(*seq_id).unwrap();
 	    seq.send_command(SequenceCommand::Stop).await;
@@ -291,6 +294,7 @@ impl Dispatcher {
 		.await;	    
 	}
 	self.playing_sequences.clear();
+	dbg!(&scene.sequences);
 	for seq_id in &scene.sequences {
 	    let seq = self.audio_sequences.get(*seq_id).unwrap();
 	    seq.send_command(SequenceCommand::Play).await;
