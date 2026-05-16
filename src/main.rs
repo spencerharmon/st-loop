@@ -1,4 +1,3 @@
-#![feature(cell_leak,strict_provenance,drain_filter,get_mut_unchecked)]
 
 mod jackio;
 mod dispatcher;
@@ -13,12 +12,44 @@ mod midi_control;
 mod constants;
 mod nsm;
 mod yaml_config;
+mod gui;
 
-use tokio;
+use clap::Parser;
 
-#[tokio::main]
-async fn main() {
-    console_subscriber::init();
-    let io = jackio::JackIO::new();
-    io.start().await;
+#[derive(Parser)]
+struct Cli {
+	/// Run headless (no GUI window).
+	#[clap(long)]
+	no_gui: bool,
+}
+
+fn main() {
+	let cli = Cli::parse();
+
+	console_subscriber::init();
+
+	// Build the tokio runtime manually so we can `spawn` the JackIO
+	// async task and still hand the main thread to eframe.
+	let rt = tokio::runtime::Builder::new_multi_thread()
+		.enable_all()
+		.build()
+		.expect("failed to build tokio runtime");
+
+	let io = jackio::JackIO::new();
+	rt.spawn(async move {
+		io.start().await;
+	});
+
+	if cli.no_gui {
+		// Headless: park the main thread; JackIO + dispatcher live on
+		// the tokio runtime.
+		loop {
+			std::thread::park();
+		}
+	}
+
+	if let Err(e) = gui::run() {
+		eprintln!("eframe exited with error: {e}");
+		std::process::exit(1);
+	}
 }

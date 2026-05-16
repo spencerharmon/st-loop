@@ -1,7 +1,6 @@
 use std::{thread, time};
 use tokio::sync::mpsc::*;
-use jack::jack_sys as j;
-use std::mem::MaybeUninit;
+use st_lib::{jack_ptr, jack_transport};
 use crate::constants::*;
 
 #[derive(Copy, Clone)]
@@ -125,7 +124,6 @@ impl JackSyncFanout {
 	&mut self,
 	channels: &mut JackSyncFanoutChannels
     ) {
-	let mut pos = MaybeUninit::uninit().as_mut_ptr();
 	let mut msg = JackSyncFanoutMessage{
 	    pos_frame: 0,
 	    framerate: 48000,
@@ -135,16 +133,13 @@ impl JackSyncFanout {
 	    next_beat_frame: 0,
 	    beat_this_cycle: false
 	};
-	
-	let client_pointer: *const j::jack_client_t = std::ptr::from_exposed_addr(self.jack_client_addr);
 
-	unsafe {
-	    j::jack_transport_query(client_pointer, pos);
-	    msg.pos_frame = (*pos).frame as usize;
-	    msg.framerate = (*pos).frame_rate as usize;
-	    msg.beats_per_bar = (*pos).beats_per_bar as usize;
-	    msg.beat = (*pos).beat as usize;
-	}	    
+	let client_pointer = unsafe { jack_ptr::recover_client(self.jack_client_addr) };
+	let snap = unsafe { jack_transport::query_transport(client_pointer) };
+	msg.pos_frame = snap.frame as usize;
+	msg.framerate = snap.frame_rate as usize;
+	msg.beats_per_bar = snap.beats_per_bar as usize;
+	msg.beat = snap.beat as usize;
 	msg.nframes = msg.pos_frame - self.last_frame;
 
 	if msg.pos_frame >= self.next_beat_frame {
