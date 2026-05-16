@@ -4,7 +4,6 @@ use crate::scene::Scene;
 use crate::track::*;
 use crate::constants::*;
 use crate::sequence::*;
-use crate::nsm;
 use crate::yaml_config::*;
 use crate::track_audio::*;
 use crate::jack_sync_fanout::*;
@@ -12,6 +11,7 @@ use crate::track_audio::*;
 use crate::audio_in_switch::*;
 use crate::jackio::*;
 use st_lib::owned_midi::*;
+use st_lib::nsm;
 use std::rc::Rc;
 use std::cell::RefCell;
 use jack::jack_sys as j;
@@ -31,6 +31,10 @@ pub struct Dispatcher {
     midi_in_vec: Vec<Receiver<OwnedMidi>>,
     midi_out_vec: Vec<OwnedMidi>,
     nsm: nsm::Client,
+    /// Held across deferred load so we can ack the NSM /reply only after
+    /// the load actually completes (see plan.org NSM audit note on reply
+    /// ordering).
+    pending_open_ack: Option<nsm::Ack>,
     path: Option<String>,
     audio_sequences: Vec<AudioSequenceCommander>,
     scenes: Vec<Scene>,
@@ -58,7 +62,16 @@ impl Dispatcher {
         audio_in_vec: Vec<Receiver<(f32, f32)>>,
     ) -> Dispatcher {
 	//nsm client
-	let nsm = nsm::Client::new();
+	let caps = nsm::Capabilities {
+	    switch: true,
+	    optional_gui: true,
+	    ..Default::default()
+	};
+	let (nsm_client, _nsm_handle) = nsm::Builder::new(CLIENT_NAME)
+	    .capabilities(caps)
+	    .launch();
+	let nsm = nsm_client;
+	let pending_open_ack: Option<nsm::Ack> = None;
 	let mut path: Option<String> = None;
 	let mut audio_sequences = Vec::<AudioSequenceCommander>::new();
 
@@ -105,6 +118,7 @@ impl Dispatcher {
             midi_in_vec, 
             midi_out_vec,
 	    nsm,
+	    pending_open_ack,
 	    path,
 	    audio_sequences,
 	    scenes,
@@ -152,27 +166,43 @@ impl Dispatcher {
 			if load_request_ready {
 			    self.process_load_request().await;
 			    load_request_ready = false;
+			    // Now that the load is done, ack the NSM Open.
+			    if let Some(ack) = self.pending_open_ack.take() {
+				ack.ok("opened");
+			    }
 			}
 		    }
 		}
 
-		Some(nsmc_message) = self.nsm.rx.recv() => {
-		    match nsmc_message {
-			nsm::NSMClientMessage::Save => {
+		Some(evt) = self.nsm.rx.recv() => {
+		    match evt {
+			nsm::Event::Save { ack } => {
 			    match &self.path {
-				Some(p) => {
-				    //send save messages to stuff
+				Some(_) => {
 				    self.process_save_request().await;
+				    ack.ok("saved");
 				}
 				None => {
 				    println!("No path configured. Check NSM server.");
+				    ack.err(-1, "no session path");
 				}
 			    }
 			}
-			nsm::NSMClientMessage::Open { path: p } => {
+			nsm::Event::Open { path: p, ack, .. } => {
 			    self.path = Some(p);
+			    self.pending_open_ack = Some(ack);
 			    load_request_ready = true;
 			}
+			nsm::Event::ShowGui | nsm::Event::HideGui => {
+			    // No GUI yet; capability advertised for future use.
+			}
+			nsm::Event::AnnounceOk { manager_name, .. } => {
+			    println!("[st-loop] NSM connected to {manager_name}");
+			}
+			nsm::Event::AnnounceError { code, message } => {
+			    eprintln!("[st-loop] NSM rejected announce ({code}): {message}");
+			}
+			nsm::Event::SessionLoaded => {}
 		    }
 		}
 		Some(commands) = command_manager_out_rx.recv() => {
@@ -337,7 +367,7 @@ impl Dispatcher {
 	}
 
 	let mut scene_map = BTreeMap::new();
-	for i in 0..(self.scenes.len() - 1) {
+	for i in 0..self.scenes.len() {
 	    let mut sequence_names = Vec::new();
 	    for idx in &self.scenes[i].sequences {
 		match &seq_maps[*idx] {

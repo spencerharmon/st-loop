@@ -363,10 +363,19 @@ impl AudioSequence {
     }
     pub fn load(&mut self, file: String, beats: usize) {
 	println!("load {}", file);
-	self.filename = file;
+	// `file` is the full path the dispatcher built (`<session>/<basename>`).
+	// We open from it directly, but only retain the basename in
+	// `self.filename` so a subsequent Save (which writes
+	// `<session>/<self.filename>`) does not double up the directory.
+	// See plan.org NSM audit note on the load/save round-trip bug.
+	let path_for_open = file.clone();
+	self.filename = std::path::Path::new(&file)
+	    .file_name()
+	    .map(|s| s.to_string_lossy().into_owned())
+	    .unwrap_or(file);
 	self.n_beats = beats;
 	dbg!(&self.n_beats);
-	let mut reader = hound::WavReader::open(&self.filename).unwrap();
+	let mut reader = hound::WavReader::open(&path_for_open).unwrap();
 
 	println!("file spec: {:?}", reader.spec());
 	let bitness = reader.spec().bits_per_sample;
