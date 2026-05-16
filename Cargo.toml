@@ -20,10 +20,7 @@ hound = "3.5.0"
 rubato = "0.12.0"
 console-subscriber = "0.1.9"
 eframe = "0.34"
+clap = { version = "3.2.21", features = ["derive"] }
 
 [profile.release]
 opt-level = 2
-
-#for console-subscriber
-[build]
-rustflags = ["--cfg", "tokio_unstable"]
