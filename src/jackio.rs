@@ -272,7 +272,7 @@ impl JackIO {
 	    jack_command_tx,
 	    midi_rx_channels,
 	    midi_tx_channels,
-	    client_pointer.expose_addr(),
+	    st_lib::jack_ptr::expose_client(client_pointer),
 	    tick_rx,
 	    audio_out_tx_channels,
 	    audio_in_rx_channels,

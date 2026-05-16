@@ -1,4 +1,3 @@
-#![feature(cell_leak,strict_provenance,drain_filter,get_mut_unchecked)]
 
 mod jackio;
 mod dispatcher;
