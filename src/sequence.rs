@@ -2,12 +2,87 @@ use std::fs::File;
 use std::time::{SystemTime, UNIX_EPOCH};
 use rubato::{FftFixedIn, Resampler};
 use std::cell::RefCell;
+use crossbeam_channel::*;
+use tokio::sync::mpsc;
+use crate::jack_sync_fanout::*;
 
-pub enum Sequence {
-    AudioSequence,
+pub enum SequenceCommand {
+    StartRecord,
+    StopRecord,
+    Play,
+    Stop,
+    Save { path: String },
+    Load { path: String, beats: usize },
+    Shutdown,
+    GetMeta
 }
 
+pub enum SequenceReply {
+    Meta {
+	track: usize,
+	beats: usize,
+	filename: String
+    },
+    Err { msg: String }
+}
+
+pub struct AudioSequenceCommander {
+    tx: mpsc::Sender<SequenceCommand>,
+    rx: mpsc::Receiver<SequenceReply>,
+    pub track: usize,
+    
+}
+
+impl AudioSequenceCommander {
+    pub fn new(
+	track: usize,
+	beats_per_bar: usize,
+	last_frame: usize,
+	framerate: usize,
+	jack_sync_rx: mpsc::Receiver<JackSyncFanoutMessage>,
+	audio_in: Receiver<(f32, f32)>,
+	audio_out: Sender<(f32, f32)>,
+    ) -> AudioSequenceCommander {
+	let (tx, mut rx) = mpsc::channel(1);
+	let (reply_tx, mut reply_rx) = mpsc::channel(1);
+	
+	let mut seq = AudioSequence::new(
+	    track,
+	    beats_per_bar,
+	    last_frame,
+	    framerate,
+	);
+
+	tokio::spawn(async move {
+	    seq.start(
+		rx,
+		reply_tx,
+		jack_sync_rx,
+		audio_in,
+		audio_out
+	    ).await;
+	});
+	
+	AudioSequenceCommander {
+	    tx,
+	    rx: reply_rx,
+	    track
+	}
+    }
+
+    pub async fn send_command(&self, command: SequenceCommand) {
+	self.tx.send(command).await;
+    }
+    
+    pub async fn recv_reply(&mut self) -> SequenceReply {
+	return self.rx.recv().await.unwrap();
+    }
+}
+
+#[derive(Debug)]
 pub struct AudioSequence {
+    playing: bool,
+    pub recording: bool,
     pub track: usize,
     pub beats_per_bar: usize,
     pub left: Vec<f32>,
@@ -19,15 +94,19 @@ pub struct AudioSequence {
     pub beat_counter: usize,
     pub n_beats: usize,
     pub recording_delay: bool,
-    pub playing_delay: bool,
-    pub recording: bool,
     pub id: usize,
     pub filename: String,
-    framerate: usize
+    framerate: usize,
 }
 
 impl AudioSequence {
-    pub fn new(track: usize, beats_per_bar: usize, last_frame: usize, framerate: usize) -> AudioSequence {
+    pub fn new(
+	track: usize,
+	beats_per_bar: usize,
+	last_frame: usize,
+	framerate: usize,
+    ) -> AudioSequence {
+	let playing = false;
 	let length = 0;
 	let left = Vec::new();
 	let right = Vec::new();
@@ -36,13 +115,14 @@ impl AudioSequence {
 	let beat_counter = 1;
 	let n_beats = 0;
 	let recording_delay = true;
-	let playing_delay = false;
-	let recording = true;
+	let recording = false;
 	let id = 0;
 	let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 	let filename = format!("{:?}-{:?}.wav", track, epoch);
 	
-	AudioSequence { track,
+	AudioSequence { playing,
+			recording,
+			track,
 			beats_per_bar,
 			left,
 			right,
@@ -53,12 +133,102 @@ impl AudioSequence {
 			beat_counter,
 			n_beats,
 			recording_delay,
-			playing_delay,
-			recording,
 			id,
 			filename,
-			framerate
+			framerate,
 	}
+    }
+    async fn start(
+	&mut self,
+	mut command_rx: mpsc::Receiver<SequenceCommand>,
+	mut reply_tx: mpsc::Sender<SequenceReply>,
+	mut jack_sync_rx: mpsc::Receiver<JackSyncFanoutMessage>,
+	audio_in: Receiver<(f32, f32)>,
+	audio_out: Sender<(f32, f32)>
+    ){
+	loop {
+	    tokio::select! {
+		cmd_o = command_rx.recv() => {
+		    if let Some(cmd) = cmd_o {
+			match cmd {
+			    SequenceCommand::StartRecord => {
+				println!("start record");
+				self.recording = true;
+			    }
+			    SequenceCommand::StopRecord =>  {
+				println!("stop record");
+				self.stop_recording();
+			    }
+			    SequenceCommand::Play =>  {
+				println!("playing");
+				self.start_playing();
+			    }
+			    SequenceCommand::Stop => {
+				println!("stopping");
+				self.playing = false;
+				self.reset_playhead();
+			    }
+			    SequenceCommand::Save { path } => {
+				self.save(path);
+			    }
+			    SequenceCommand::Load { path, beats } => {
+				dbg!(&beats);
+				self.load(path, beats);
+			    }
+			    SequenceCommand::GetMeta => {
+				if !self.recording {
+				    reply_tx.send(SequenceReply::Meta {
+					track: self.track,
+					beats: self.n_beats,
+					filename: (self.filename.clone()).to_string()
+				    }).await;
+				} else {
+				    reply_tx.send(SequenceReply::Err {
+					msg: "Cannot GetMeta while recording".to_string()
+				    }).await;
+				}
+				
+				
+			    }
+			    SequenceCommand::Shutdown => {
+				println!("shutdown");
+				break
+			    }
+			}
+		    }
+		}
+		js_o = jack_sync_rx.recv() => {
+		    if let Some(jack_sync_msg) = js_o {
+			if self.playing {
+			    if jack_sync_msg.beat_this_cycle {
+				self.observe_beat(jack_sync_msg.beat);
+			    }
+			    
+			    if let Some(data) = self.process_position(
+				jack_sync_msg.nframes,
+				jack_sync_msg.pos_frame
+			    ) {
+				for tup in data {
+				    audio_out.try_send(tup);
+				}
+			    }
+			} else if self.recording {
+			    if jack_sync_msg.beat_this_cycle {
+				self.observe_beat(jack_sync_msg.beat);
+			    }
+			    
+			    loop {
+				if audio_in.is_empty() {
+				    break
+				}
+				self.process_record(audio_in.try_recv().unwrap());
+			    }
+			}
+		    }
+		}
+	    }
+	}
+	println!("end of sequence loop");
     }
 
     pub fn set_id(&mut self, id: usize) {
@@ -83,7 +253,6 @@ impl AudioSequence {
     pub fn reset_playhead(&mut self) {
 	self.playhead = 0;
 	self.beat_counter = 1;
-	self.playing_delay = false;
     }
     
     pub fn observe_beat(&mut self, beat: usize) {
@@ -117,14 +286,11 @@ impl AudioSequence {
 	// 1 beat wiggle room after bar start
 	if self.n_beats % self.beats_per_bar == 0 {
 	    self.beat_counter = 1;
-	    //	    self.playhead = self.cycles_since_beat;
 	    self.playhead = self.cycles_since_beat;
 	    for _ in 0..self.cycles_since_beat {
 		self.left.pop();
 		self.right.pop();
 	    }
-	    //stop record goes after start play so we can override playing delay.
-	    self.playing_delay = false;
 	} else {
 	    self.beat_counter = self.n_beats + 1;
 	    self.n_beats = (self.n_beats - (self.n_beats % self.beats_per_bar)) + self.beats_per_bar;
@@ -133,9 +299,9 @@ impl AudioSequence {
 	self.recording = false;
 	println!("stop recording. Beat length: {}", self.n_beats);
     }
-    pub fn start_playing(&mut self, frame: usize) {
-	self.last_frame = frame;
-	self.playing_delay = true;
+    
+    pub fn start_playing(&mut self) {
+	self.playing = true;
     }
     
     pub fn process_position(&mut self,
@@ -146,29 +312,20 @@ impl AudioSequence {
 	    return None
 	}
 	if pos_frame == self.last_frame {
-//	    println!("yep");
-	    return None
-	}
-//	if self.beat_counter == self.n_beats {
-//	    if self.playing_delay {
-//		println!("playing delay off-----------------");
-//		self.playing_delay = false;
-//	    }
-//	}
-	if self.playing_delay {
 	    return None
 	}
 
 	let mut ret = Vec::new();
 
-	for i in 1..nframes + 1 {
+	//nframes is output buffer len * 2 (for some reason)
+	for _ in 0..nframes/2 {
 	    if let Some(l) = self.left.get(self.playhead) {
 
 		if let Some(r) = self.right.get(self.playhead) {
 		    ret.push((*l, *r));
 
 		} 
-	    } 
+	    }
 
 	    if self.playhead == 0 {
 		println!("reset playhead worked");
@@ -177,9 +334,12 @@ impl AudioSequence {
 	}
 
 	self.last_frame = pos_frame;
+	if ret.len() == 0 {
+	    return None;
+	}
 	Some(ret)
     }
-    pub fn save(&self, path: &String) {
+    pub fn save(&self, path: String) {
 	println!("sequence save {}", path);
 	let full_path = format!("{}/{}", path, self.filename);
 	if let Ok(_) = File::open(&full_path) {
@@ -201,9 +361,21 @@ impl AudioSequence {
 	}
 
     }
-    pub fn load(&mut self, file: String) {
+    pub fn load(&mut self, file: String, beats: usize) {
 	println!("load {}", file);
-	let mut reader = hound::WavReader::open(file).unwrap();
+	// `file` is the full path the dispatcher built (`<session>/<basename>`).
+	// We open from it directly, but only retain the basename in
+	// `self.filename` so a subsequent Save (which writes
+	// `<session>/<self.filename>`) does not double up the directory.
+	// See plan.org NSM audit note on the load/save round-trip bug.
+	let path_for_open = file.clone();
+	self.filename = std::path::Path::new(&file)
+	    .file_name()
+	    .map(|s| s.to_string_lossy().into_owned())
+	    .unwrap_or(file);
+	self.n_beats = beats;
+	dbg!(&self.n_beats);
+	let mut reader = hound::WavReader::open(&path_for_open).unwrap();
 
 	println!("file spec: {:?}", reader.spec());
 	let bitness = reader.spec().bits_per_sample;
@@ -296,14 +468,12 @@ impl AudioSequence {
 		hound::SampleFormat::Float => {
 		    for s in reader.samples::<f32>() {
 			let sample = s.unwrap();
-//			println!("{:?}", sample);
 			data.push(sample);
 		    }
 		},
 		hound::SampleFormat::Int => {
 		    for s in reader.samples::<i32>() {
 			let sample = (s.unwrap() as f32) / 2.0_f32.powf(bitness.into());
-//			println!("{:?}", sample);
 			data.push(sample);
 		    }
 		}
@@ -311,6 +481,7 @@ impl AudioSequence {
 	    (self.left, self.right) = deinterleave(data);
 	}
 	self.recording = false;
+	self.start_playing();
     }
 }
 

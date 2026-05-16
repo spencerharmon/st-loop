@@ -1,5 +1,3 @@
-use crate::sequence::Sequence;
-
 #[derive(Clone)]
 pub struct Scene{
     pub sequences: Vec<usize>
@@ -15,6 +13,6 @@ impl Scene{
 	println!("sequence added. new length: {:?}", self.sequences.len());
     }
     pub fn remove_sequence(&mut self, seq: usize) {
-	self.sequences.drain_filter(|x| *x == seq);
+	self.sequences.retain(|x| *x != seq);
     }
 }

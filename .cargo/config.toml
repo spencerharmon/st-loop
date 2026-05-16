@@ -1,0 +1,6 @@
+# console-subscriber requires the tokio_unstable cfg.
+# This was previously (incorrectly) placed in Cargo.toml's [build] table,
+# which cargo silently ignores. The build-system-wide rustflags belong
+# here.
+[build]
+rustflags = ["--cfg", "tokio_unstable"]
