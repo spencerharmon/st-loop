@@ -199,6 +199,14 @@ impl AudioSequence {
 		}
 		js_o = jack_sync_rx.recv() => {
 		    if let Some(jack_sync_msg) = js_o {
+			// Always refresh the live meter from the message
+			// so stop_recording (and any future logic) sees
+			// the current value rather than the value
+			// captured at AudioSequence construction time.
+			// Fixes the mid-recording-meter-change bug where
+			// recording started in 4/4 then switched to 7/8
+			// would round its length to a 4-beat multiple.
+			self.beats_per_bar = jack_sync_msg.beats_per_bar;
 			if self.playing {
 			    if jack_sync_msg.beat_this_cycle {
 				self.observe_beat(jack_sync_msg.beat);
@@ -515,3 +523,95 @@ fn deinterleave(v: Vec<f32>) -> (Vec<f32>, Vec<f32>) {
     }
     (l, r)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build an AudioSequence in a way that doesn't need tokio /
+    /// channels — just for testing the pure rounding logic.
+    fn new_seq(beats_per_bar: usize) -> AudioSequence {
+        AudioSequence::new(0, beats_per_bar, 0, 48_000)
+    }
+
+    /// Simulate the post-record state: `n_beats` complete beats were
+    /// counted by observe_beat, and the buffer holds samples from
+    /// roughly the same number of beats. We don't need real samples
+    /// for the rounding tests; just non-empty buffers so the cleanup
+    /// path in stop_recording has something to pop.
+    fn seed_recording(s: &mut AudioSequence, n_beats: usize, cycles_since_beat: usize) {
+        s.recording = true;
+        s.recording_delay = false;
+        s.n_beats = n_beats;
+        s.cycles_since_beat = cycles_since_beat;
+        // Seed buffers with cycles_since_beat samples so pop() works.
+        for i in 0..cycles_since_beat {
+            s.left.push(i as f32);
+            s.right.push(i as f32);
+        }
+    }
+
+    #[test]
+    fn stop_on_bar_boundary_trims_back_to_bar() {
+        // 4/4, 8 beats recorded (= 2 bars exactly), 5 cycles of audio
+        // captured past the last beat. Should pop those 5 samples
+        // (we landed on a bar boundary so the trailing audio is
+        // post-bar overshoot).
+        let mut s = new_seq(4);
+        seed_recording(&mut s, 8, 5);
+        s.stop_recording();
+        assert_eq!(s.n_beats, 8);
+        assert_eq!(s.left.len(), 0);
+        assert_eq!(s.right.len(), 0);
+    }
+
+    #[test]
+    fn stop_mid_bar_rounds_up_to_next_bar_44() {
+        // 4/4, 5 beats recorded (1 bar + 1 beat). Should round up to
+        // 8 (next bar boundary).
+        let mut s = new_seq(4);
+        seed_recording(&mut s, 5, 0);
+        s.stop_recording();
+        assert_eq!(s.n_beats, 8);
+    }
+
+    #[test]
+    fn stop_mid_bar_rounds_up_to_next_bar_78() {
+        // 7/8, 10 beats recorded (1 bar + 3 beats). Round up to 14.
+        let mut s = new_seq(7);
+        seed_recording(&mut s, 10, 0);
+        s.stop_recording();
+        assert_eq!(s.n_beats, 14);
+    }
+
+    /// Regression test for the meter-change-mid-recording bug.
+    ///
+    /// Before the fix: AudioSequence captured beats_per_bar at
+    /// construction and never updated it; stop_recording rounded
+    /// based on the stale value.
+    ///
+    /// After the fix: the dispatcher / sequence loop refreshes
+    /// beats_per_bar from each JackSyncFanoutMessage before reading
+    /// it. To simulate that here, we manually set beats_per_bar to
+    /// the *new* meter (as the live message would have done) before
+    /// calling stop_recording.
+    #[test]
+    fn stop_recording_uses_live_meter_after_signature_change() {
+        // Construction-time meter was 4/4...
+        let mut s = new_seq(4);
+        // ...but during recording the conductor switched to 7/8. Five
+        // beats were recorded; the live message updated beats_per_bar.
+        s.beats_per_bar = 7;
+        seed_recording(&mut s, 5, 0);
+        s.stop_recording();
+        // With live-meter awareness, 5 beats in 7/8 rounds up to the
+        // 7-beat boundary, not to 8 (which would be the stale-meter
+        // answer).
+        assert_eq!(
+            s.n_beats, 7,
+            "expected stop_recording to round to the live 7/8 meter, got {}",
+            s.n_beats
+        );
+    }
+}
+
