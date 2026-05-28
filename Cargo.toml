@@ -24,3 +24,5 @@ clap = { version = "3.2.21", features = ["derive"] }
 
 [profile.release]
 opt-level = 2
+[profile.dev]
+debug = "line-tables-only"
